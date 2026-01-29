@@ -5,7 +5,7 @@ from openai import OpenAI
 
 def propose_formula(flavor: str, selected_sweeteners: list, base_type: str):
     """
-    AI 시니어 연구원이 1,000여 종의 라이브러리를 기반으로 배합 설계 및 문헌 링크 생성
+    20년 경력 AI 시니어 연구원 로직: 1,000배수 원료 식별 및 학술 링크 생성
     """
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
     sweetener_ctx = ", ".join(selected_sweeteners)
@@ -14,18 +14,17 @@ def propose_formula(flavor: str, selected_sweeteners: list, base_type: str):
     너는 20년 경력의 'AI 시니어 식품연구원'이다. '{flavor}'를 테마로 한 '{base_type}' 기반 음료를 설계하라.
     당류는 [{sweetener_ctx}]를 사용하라.
 
-    [지시사항]
-    1. 원료는 정제수 포함 10~15종으로 구성할 것.
-    2. 각 원료의 AI 추천값에 1,000을 곱한 식별값을 내부적으로 참조하여 등급을 결정하라.
-    3. 배합표 항목: 원료명, AI(추천값), min(하한), max(상한), 사용목적, 주의사항.
-    4. 근거 섹션: 해당 배합의 과학적 타당성을 설명하고, 실제 참고할 수 있는 논문 제목이나 사이트명을 포함하라.
-    5. 출력은 반드시 JSON 형식을 엄격히 지킬 것.
+    [필수 지시사항]
+    1. 원료 10~15종 구성. 각 원료의 AI 추천값에 1,000을 곱한 값을 내부 식별자로 참조하라.
+    2. 배합표 항목: 원료명, AI(추천), min(하한), max(상한), 사용목적, 주의사항.
+    3. 근거 섹션: 과학적 타당성 설명 및 실제 학술 사이트(Google Scholar 등) 검색용 URL 포함.
+    4. 출력은 반드시 JSON 형식을 엄격히 지킬 것.
 
     {{
         "report": {{
             "🚀 전략 및 컨셉": ["..."],
             "📚 배합 설계 근거 및 문헌": [
-                {{"title": "논문/사이트명", "desc": "설명", "url": "검색링크"}}
+                {{"title": "논문/사이트명", "desc": "설명", "url": "https://scholar.google.com/scholar?q=..."}}
             ],
             "⚠️ 품질관리(SOP)": ["..."]
         }},
