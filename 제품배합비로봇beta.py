@@ -693,6 +693,39 @@ def plot_top5_bar(top5: List[Dict[str, Any]]) -> None:
 
 
 def plot_sensory_radar(sensory: Dict[str, float]) -> None:
+    import math
+
+    labels = list(sensory.keys())
+    values = list(map(float, sensory.values()))
+
+    # 기준선(교육용 reference)
+    baseline = [5.0] * len(labels)
+
+    values += values[:1]
+    baseline += baseline[:1]
+
+    angles = [2 * math.pi * i / len(labels) for i in range(len(labels))]
+    angles += angles[:1]
+
+    fig, ax = plt.subplots(figsize=(4, 4), subplot_kw=dict(polar=True))  # 🔹 축소
+
+    ax.plot(angles, values, linewidth=2, label="Target")
+    ax.fill(angles, values, alpha=0.15)
+
+    ax.plot(angles, baseline, linestyle="--", linewidth=1, label="Baseline(5)")
+
+    ax.set_thetagrids(
+        [a * 180 / math.pi for a in angles[:-1]],
+        labels,
+        fontsize=9  # 🔹 글씨 축소
+    )
+    ax.set_yticklabels([])
+    ax.set_title("Sensory Target Radar (0–10)", fontsize=11)
+    ax.legend(loc="upper right", bbox_to_anchor=(1.3, 1.1), fontsize=8)
+
+    plt.tight_layout()
+    st.pyplot(fig, clear_figure=True)
+
     # 레이다 차트(간단 구현)
     labels = list(sensory.keys())
     values = [float(sensory[k]) for k in labels]
