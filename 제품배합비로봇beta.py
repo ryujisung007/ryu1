@@ -692,11 +692,6 @@ def plot_top5_bar(top5: List[Dict[str, Any]]) -> None:
     st.pyplot(fig, clear_figure=True)
 
 
-def plot_sensory_radar(sensory: Dict[str, float]) -> None:
-    import math
-
-    labels = list(sensory.keys())
-    values = list(map(float, sensory.values()))
 
     # 기준선(교육용 reference)
     baseline = [5.0] * len(labels)
