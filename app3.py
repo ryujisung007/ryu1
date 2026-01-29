@@ -157,3 +157,33 @@ if st.session_state.records:
                     text-align:center;
                     background-color:white;
                 ">
+                    <div style="
+                        height:90px;
+                        background:#fde68a;
+                        border-radius:6px;
+                        margin-bottom:10px;
+                        display:flex;
+                        align-items:center;
+                        justify-content:center;
+                        font-size:12px;
+                    ">
+                        가상 이미지
+                    </div>
+                    <strong>{t['flavor']} 스퀴지 주스</strong><br/>
+                    <span style="font-size:13px;">rPET 350mL</span><br/>
+                    <span style="color:#2563eb;font-size:12px;">
+                        상큼 / 데일리
+                    </span>
+                </div>
+                """,
+                unsafe_allow_html=True
+            )
+
+    st.divider()
+
+    # --- 테이블 ---
+    st.subheader("📋 가상 품목제조보고 테이블")
+    st.dataframe(records, use_container_width=True)
+
+else:
+    st.info("좌측에서 조건을 선택한 후 **검색 / 분석 실행**을 눌러주세요.")
