@@ -4,59 +4,45 @@ import hashlib
 from typing import Any, Dict, List, Optional
 
 def get_hash(data: Any) -> str:
-    """캐시용 해시 생성"""
     return hashlib.sha256(json.dumps(data, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:16]
 
-def safe_json_loads(text: str) -> Optional[Dict[str, Any]]:
-    """불완전한 JSON 텍스트 보정 및 파싱"""
-    try:
-        start, end = text.find("{"), text.rfind("}")
-        return json.loads(text[start:end + 1]) if start != -1 else None
-    except:
-        return None
-
 def analyze_trends(top5: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Top5 트렌드 분석 및 캐싱"""
     key = get_hash(top5)
     if "ai_cache" not in st.session_state:
         st.session_state.ai_cache = {}
-    
     if key in st.session_state.ai_cache:
         return st.session_state.ai_cache[key]
 
-    # 기본 결과 구조 (API 미연결 시 폴백)
     result = {
         "summary": "상큼함과 건강 지향적 로우슈거 트렌드가 지속되고 있습니다.",
         "flavors": {}
     }
-    
-    # 실제 OpenAI 연동 시 이 부분에서 로직 수행
     st.session_state.ai_cache[key] = result
     return result
 
 def propose_formula(flavor: str) -> Dict[str, Any]:
-    """
-    배합비 산출 함수: 항상 유효한 딕셔너리를 반환하여 AttributeError 방지.
-    기존배합비 대비 AI 제안(A/B)을 비교 형식으로 생성합니다.
-    """
+    """마케팅 전략 요소 개조식 정리 및 상세 배합비 데이터"""
     try:
-        # 교육용 표준 배합비 데이터 구성
         result = {
-            "concept": f"{flavor} 본연의 풍미를 극대화한 '클린 라벨' 및 '저당' 설계 전략",
+            "marketing_strategy": {
+                "제품컨셉": [f"프리미엄 {flavor} 본연의 맛을 구현한 'Pure Nature' 라인업", "2030 직장인을 위한 데일리 리프레시 음료"],
+                "핵심USP": ["NFC 공법을 통한 영양 손실 최소화", "알룰로스 대체 공법으로 당류 0g 구현", "환경친화적 rPET 및 이지필(Easy-peel) 라벨 적용"],
+                "타겟전략": ["20대: SNS 친화적 투명 패키징 및 비주얼 강조", "30대: 건강 지표(Zero-sugar) 중심의 기능성 소구"],
+                "품질관리": ["과즙 침전물 방지를 위한 균질화 공정 최적화", "rPET 내열성 보강을 위한 Hot-fill 온도 정밀 제어"]
+            },
             "table": [
-                {"원재료": "정제수", "기존배합비(%)": 82.0, "AI제안A(%)": 80.0, "AI제안B(%)": 78.0},
-                {"원재료": f"NFC {flavor} 과즙", "기존배합비(%)": 10.0, "AI제안A(%)": 12.0, "AI제안B(%)": 15.0},
-                {"원재료": "액상알룰로스", "기존배합비(%)": 5.0, "AI제안A(%)": 6.0, "AI제안B(%)": 4.0},
-                {"원재료": "구연산", "기존배합비(%)": 0.3, "AI제안A(%)": 0.3, "AI제안B(%)": 0.4},
-                {"원재료": "천연향료", "기존배합비(%)": 0.2, "AI제안A(%)": 0.3, "AI제안B(%)": 0.3},
-                {"원재료": "비타민C", "기존배합비(%)": 0.1, "AI제안A(%)": 0.1, "AI제안B(%)": 0.1},
-                {"원재료": "펙틴", "기존배합비(%)": 0.2, "AI제안A(%)": 0.2, "AI제안B(%)": 0.2},
-                {"원재료": "정제소금", "기존배합비(%)": 0.05, "AI제안A(%)": 0.05, "AI제안B(%)": 0.05},
-                {"원재료": "천연클라우드", "기존배합비(%)": 1.5, "AI제안A(%)": 1.0, "AI제안B(%)": 1.8},
-                {"원재료": "베타카로틴", "기존배합비(%)": 0.65, "AI제안A(%)": 0.05, "AI제안B(%)": 0.1}
+                {"원재료": "정제수", "기존": 82.0, "AI": 80.0},
+                {"원재료": f"NFC {flavor} 과즙", "기존": 10.0, "AI": 15.0},
+                {"원재료": "액상알룰로스", "기존": 5.0, "AI": 4.0},
+                {"원재료": "구연산", "기존": 0.3, "AI": 0.3},
+                {"원재료": "천연향료", "기존": 0.2, "AI": 0.3},
+                {"원재료": "비타민C", "기존": 0.1, "AI": 0.1},
+                {"원재료": "펙틴", "기존": 0.2, "AI": 0.2},
+                {"원재료": "정제소금", "기존": 0.05, "AI": 0.05},
+                {"원재료": "천연클라우드", "기존": 1.5, "AI": 1.0},
+                {"원재료": "베타카로틴", "기존": 0.65, "AI": 0.05}
             ]
         }
         return result
     except Exception:
-        # 오류 시에도 빈 구조를 반환하여 UI 충돌 방지
-        return {"concept": "배합비를 산출할 수 없습니다.", "table": []}
+        return {"marketing_strategy": {}, "table": []}
