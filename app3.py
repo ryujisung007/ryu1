@@ -268,7 +268,8 @@ for col, t in zip(cols, top5):
         continue
 
     with col:
-        img_url = generate_image_for_flavor(f)
+     img_url = generate_image_for_flavor(f)
+st.write("DEBUG IMAGE URL:", img_url)
         if img_url:
             st.image(img_url, use_container_width=True)
         else:
