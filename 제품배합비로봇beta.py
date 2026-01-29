@@ -667,6 +667,22 @@ def compute_step() -> int:
 # 차트(Top5, 관능 레이다)
 # =========================
 def plot_top5_bar(top5: List[Dict[str, Any]]) -> None:
+    # 영어 라벨로 깨짐 방지
+    labels = [FLAVOR_EN_MAP.get(t["flavor"], t["flavor"]) for t in top5]
+    shares = [t["share"] for t in top5]
+
+    fig, ax = plt.subplots(figsize=(6, 3))  # 🔹 크기 축소
+    ax.barh(labels, shares, color="#60a5fa")
+    ax.set_xlabel("Share (%)")
+    ax.set_title("Top 5 Flavor Share", fontsize=11)
+    ax.invert_yaxis()  # 점유율 높은 것이 위로
+
+    for i, v in enumerate(shares):
+        ax.text(v + 0.3, i, f"{v}%", va="center", fontsize=9)
+
+    plt.tight_layout()
+    st.pyplot(fig, clear_figure=True)
+
     flavors = [t["flavor"] for t in top5]
     shares = [t["share"] for t in top5]
     fig = plt.figure()
