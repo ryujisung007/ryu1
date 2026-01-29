@@ -272,4 +272,13 @@ for col, t in zip(cols, top5):
         if img_url:
             st.image(img_url, use_container_width=True)
         else:
-            st.markdown("<div style='height:200px;background:#eee;text-align:center;line-height:200px;'>이미지 없음</d>
+            st.markdown("<div style='height:200px;background:#eee;text-align:center;line-height:200px;'>이미지 없음</div>", unsafe_allow_html=True)
+
+        st.markdown(f"**{f} 스퀴지 주스**")
+        st.caption(info.get("market_comment"))
+        st.write(info.get("taste_description"))
+
+st.divider()
+
+st.subheader("📋 가상 품목제조보고 테이블")
+st.dataframe(records, use_container_width=True)
