@@ -1,14 +1,14 @@
 """
-ABC 제품개발 Streamlit GUI 데모 (안정화 + 이미지 생성 버전)
+ABC 제품개발 Streamlit GUI 데모 (안정화 + Unsplash 이미지 버전)
 - 가상 품목제조보고 데이터
 - Top5 플레이버 분석
 - OpenAI 실제 호출 기반 트렌드 해석 및 맛 설명
-- OpenAI 이미지 생성(플레이버별 1장) + 캐시
+- Unsplash 이미지 자동 연동 (한글 플레이버 → 영어 키워드 매핑)
 - 세션 상태 방어, AI 실패 fallback, 진행 상태 표시
 
 Author role:
 - 20년 경력 AI 코딩 스택 전문가
-- Streamlit 재실행 모델을 고려한 방어적 설계
+- Streamlit Cloud 최적화 (외부 이미지 안정성 우선)
 - 가독성·안정성 최우선
 """
 
@@ -20,8 +20,7 @@ from collections import Counter
 from datetime import datetime, timedelta
 import json
 import time
-import hashlib
-from typing import Dict, Any, Optional
+from typing import Dict
 
 # =========================
 # 설정
@@ -29,7 +28,7 @@ from typing import Dict, Any, Optional
 st.set_page_config(page_title="ABC 제품개발 데모", layout="wide")
 
 # =========================
-# 세션 상태 초기화 (항상 먼저)
+# 세션 상태 초기화
 # =========================
 
 def init_session_state():
@@ -39,7 +38,6 @@ def init_session_state():
         "ai_result": None,
         "ai_error": None,
         "last_run": None,
-        "image_cache": {},  # flavor -> image_url
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -48,7 +46,7 @@ def init_session_state():
 init_session_state()
 
 # =========================
-# 가상 데이터 생성 로직
+# 가상 데이터 생성
 # =========================
 
 FLAVORS = [
@@ -56,6 +54,21 @@ FLAVORS = [
     "자몽", "복숭아", "파인애플", "딸기",
     "블루베리", "유자", "배"
 ]
+
+FLAVOR_EN_MAP: Dict[str, str] = {
+    "오렌지": "orange juice",
+    "사과": "apple juice",
+    "포도": "grape juice",
+    "망고": "mango juice",
+    "레몬": "lemon citrus drink",
+    "자몽": "grapefruit citrus drink",
+    "복숭아": "peach juice",
+    "파인애플": "pineapple juice",
+    "딸기": "strawberry juice",
+    "블루베리": "blueberry juice",
+    "유자": "yuzu citrus drink",
+    "배": "pear juice",
+}
 
 FLAVOR_WEIGHTS = {
     "오렌지": 0.18,
@@ -112,13 +125,13 @@ def calculate_top5_flavors(records):
     return result
 
 # =========================
-# OpenAI 실제 분석 (안전 래퍼)
+# OpenAI 텍스트 분석
 # =========================
 
 def analyze_with_openai_safe(top5):
     try:
         from openai import OpenAI
-        client = OpenAI(api_key=st.secrets.get("OPENAI_API_KEY"))
+        client = OpenAI()
 
         flavor_stats = [{"flavor": t["flavor"], "share": t["share"]} for t in top5]
 
@@ -139,69 +152,35 @@ def analyze_with_openai_safe(top5):
             "}",
         ])
 
-        resp = client.responses.create(
-            model="o4-mini",
-            input=prompt,
-        )
+        resp = client.responses.create(model="o4-mini", input=prompt)
         return json.loads(resp.output_text)
 
     except Exception as e:
         st.session_state.ai_error = str(e)
         return None
 
-
 # =========================
-# OpenAI 이미지 생성 (플레이버별 1장, 캐시)
+# Unsplash 이미지 (한글→영문 매핑)
 # =========================
 
-def generate_image_for_flavor(flavor: str) -> Optional[str]:
-    if flavor in st.session_state.image_cache:
-        return st.session_state.image_cache[flavor]
-
-    try:
-        from openai import OpenAI
-        client = OpenAI(api_key=st.secrets.get("OPENAI_API_KEY"))
-
-        prompt = (
-            f"A realistic product photo of a bottled juice drink, flavor {flavor}, "
-            "clear rPET bottle, minimal modern Korean beverage design, studio lighting"
-        )
-
-        img = client.images.generate(
-            model="gpt-image-1",
-            prompt=prompt,
-            size="512x512",
-        )
-
-        url = img.data[0].url
-        st.session_state.image_cache[flavor] = url
-        return url
-
-    except Exception:
-        return None
-
+def get_unsplash_image(flavor_kr: str) -> str:
+    query = FLAVOR_EN_MAP.get(flavor_kr, "fruit juice")
+    return f"https://source.unsplash.com/featured/512x512/?{query}"
 
 # =========================
 # UI
 # =========================
 
 st.title("🥤 ABC 제품개발 GUI 데모")
-st.caption("가상 데이터 + OpenAI 실제 분석 + 이미지 생성")
+st.caption("가상 데이터 + OpenAI 텍스트 분석 + Unsplash 이미지")
 
 # --- Sidebar ---
 st.sidebar.header("🔍 검색 조건")
 
-months = st.sidebar.number_input(
-    "조회 개월 수",
-    min_value=1,
-    max_value=6,
-    value=1,
-    step=1,
-)
-
+months = st.sidebar.number_input("조회 개월 수", 1, 6, 1)
 run = st.sidebar.button("검색 / 분석 실행")
 
-# --- 실행 로직 ---
+# --- 실행 ---
 if run:
     st.session_state.ai_error = None
     st.session_state.last_run = time.time()
@@ -209,27 +188,21 @@ if run:
     records = generate_fake_products(months)
     top5 = calculate_top5_flavors(records)
 
-    progress = st.progress(0)
-    progress.progress(30)
-
     with st.spinner("AI가 플레이버 트렌드를 분석 중입니다..."):
         ai_result = analyze_with_openai_safe(top5)
-        progress.progress(70)
 
     st.session_state.records = records
     st.session_state.top5 = top5
     st.session_state.ai_result = ai_result
 
-    progress.progress(100)
-
 # =========================
-# Dashboard (방어)
+# Dashboard
 # =========================
 
-records = st.session_state.get("records")
-top5 = st.session_state.get("top5")
-ai = st.session_state.get("ai_result")
-ai_error = st.session_state.get("ai_error")
+records = st.session_state.records
+top5 = st.session_state.top5
+ai = st.session_state.ai_result
+ai_error = st.session_state.ai_error
 
 if records is None or top5 is None:
     st.info("좌측에서 조건을 선택한 후 **검색 / 분석 실행**을 눌러주세요.")
@@ -238,11 +211,11 @@ if records is None or top5 is None:
 st.subheader("📊 실행 요약")
 st.write(f"총 **{len(records)}건** 생성됨 · 최근 **{months}개월**")
 
-st.divider()
-
 if ai is None:
-    st.warning("AI 분석 결과를 불러오지 못했습니다.\n\n" + (ai_error or "알 수 없는 오류"))
+    st.warning("AI 분석 실패: " + (ai_error or "알 수 없는 오류"))
     st.stop()
+
+st.divider()
 
 st.subheader("🧠 AI 플레이버 트렌드 요약")
 st.info(ai.get("summary", "요약 없음"))
@@ -251,33 +224,22 @@ st.divider()
 
 st.subheader("🔥 Top5 플레이버")
 for t in top5:
-    f = t["flavor"]
-    info = ai.get("flavors", {}).get(f)
-    if info:
-        st.write(f"{t['rank']}위 **{f}** – {t['count']}건 ({t['share']}%) · {info['level']}")
+    info = ai.get("flavors", {}).get(t["flavor"], {})
+    st.write(f"{t['rank']}위 **{t['flavor']}** – {t['share']}% · {info.get('level','')}")
 
 st.divider()
 
-st.subheader("🧃 플레이버별 대표 제품 (AI 분석 + 이미지)")
-
+st.subheader("🧃 플레이버별 대표 제품 (Unsplash 이미지)")
 cols = st.columns(5)
+
 for col, t in zip(cols, top5):
     f = t["flavor"]
-    info = ai.get("flavors", {}).get(f)
-    if not info:
-        continue
-
+    info = ai.get("flavors", {}).get(f, {})
     with col:
-     img_url = generate_image_for_flavor(f)
-st.write("DEBUG IMAGE URL:", img_url)
-        if img_url:
-            st.image(img_url, use_container_width=True)
-        else:
-            st.markdown("<div style='height:200px;background:#eee;text-align:center;line-height:200px;'>이미지 없음</div>", unsafe_allow_html=True)
-
+        st.image(get_unsplash_image(f), use_container_width=True)
         st.markdown(f"**{f} 스퀴지 주스**")
-        st.caption(info.get("market_comment"))
-        st.write(info.get("taste_description"))
+        st.caption(info.get("market_comment", ""))
+        st.write(info.get("taste_description", ""))
 
 st.divider()
 
