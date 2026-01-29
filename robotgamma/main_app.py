@@ -1,80 +1,37 @@
+from __future__ import annotations
 import streamlit as st
-import pandas as pd
-import engine_ai as ai
-import ui_layout as ui
-import os
+import json
+from openai import OpenAI
 
-st.set_page_config(page_title="ABC 제품개발 로봇 Gamma", layout="wide")
-
-# [수정] 파일 존재 확인 후 자동 로드
-DB_PATH = "ingredients_db.csv"
-
-if os.path.exists(DB_PATH):
-    # 헤더 구조가 복잡하므로 2번째 행(index 0)을 컬럼으로 사용
-    db_df = pd.read_csv(DB_PATH, header=1)
-    # 불필요한 첫 행(설명문) 제거
-    db_df = db_df.drop(0).reset_index(drop=True)
-    st.sidebar.success(f"✅ 원료 DB({len(db_df)}종) 로드 완료")
-else:
-    st.sidebar.error("❌ 'ingredients_db.csv' 파일을 찾을 수 없습니다.")
-    st.stop()
-
-if "selected_flavor" not in st.session_state: st.session_state.selected_flavor = None
-
-# [사이드바 필터 로직 생략 없이 유지]
-st.sidebar.header("🔍 R&D 전문가용 컨트롤 센터")
-with st.sidebar.expander("🏢 기업 및 조건 필터", expanded=True):
-    target_comp = st.multiselect("제조사별 검색", options=db_df["원산지"].unique()) # 원산지로 대체 예시
-
-# 메인 UI 실행
-ui.render_top5_cards([{"flavor":"사과","share":30}, {"flavor":"망고","share":25}, {"flavor":"포도","share":20}])
-
-if st.session_state.selected_flavor:
-    st.divider()
-    st.subheader(f"🧪 {st.session_state.selected_flavor} DB 연동 시뮬레이터")
+def propose_formula_with_db(flavor: str, s_choice: list, b_type: str, db_df):
+    """
+    업로드된 과일원료 DB에서 플레이버에 맞는 원료를 선별하여 설계
+    """
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
     
-    c1, c2 = st.columns(2)
-    with c1: b_type = st.selectbox("가공 방식", ["농축액", "NFC", "퓨레"])
-    with c2: s_choice = st.multiselect("당류 선택", ["알룰로스", "스테비아", "정백당"], default=["알룰로스"])
+    # 플레이버 키워드로 DB 필터링 (속도 향상 및 1,000pt 로직 반영)
+    relevant_items = db_df[db_df['원료명'].str.contains(flavor, na=False)].head(15)
+    db_sample = relevant_items.to_dict(orient='records')
+    
+    prompt = f"""
+    너는 20년 경력의 'AI 시니어 식품연구원'이다. 제공된 DB 정보를 참고하여 '{flavor}' 음료를 설계하라.
+    
+    [참고 DB 원료 풀]
+    {db_sample}
 
-    ckey = f"v_db_{st.session_state.selected_flavor}_{b_type}_{hash(tuple(s_choice))}"
-    if ckey not in st.session_state:
-        with st.status("AI 시니어 연구원이 DB 정밀 분석 중...") as s:
-            res = ai.propose_formula_with_db(st.session_state.selected_flavor, s_choice, b_type, db_df)
-            st.session_state[ckey] = res
-            s.update(label="✅ 분석 완료", state="complete")
-
-    res = st.session_state[ckey]
-    if res and "formula" in res:
-        # 추천배합표 최상단 고정
-        table_spot = st.empty()
-        formula = res["formula"]
-        
-        st.markdown("---")
-        st.markdown("#### 🛠️ 원료별 정밀 조절 (상하한선 물리 고정)")
-        
-        others = [i for i in formula if "정제수" not in i['원료명']]
-        adj, sum_others = {}, 0.0
-        scols = st.columns(2)
-        
-        for i, item in enumerate(others):
-            with scols[i % 2]:
-                # [무결성] 슬라이더 물리적 범위 고정
-                v = st.slider(f"**{item['원료명']}** ({item['min']}%~{item['max']}%)", 
-                              float(item['min']), float(item['max']), float(item['AI']), 0.01,
-                              key=f"sld_{ckey}_{item['원료명']}")
-                adj[item['원료명']] = v
-                sum_others += v
-        
-        cur_w = max(0.0, 100.0 - sum_others)
-        adj["정제수"] = cur_w
-        
-        # 3단 대조표 구성
-        d_list = []
-        for item in formula:
-            nm, re_v = item['원료명'], item['AI']
-            cu_v = adj.get(nm, cur_w)
-            d_list.append({"원료명": nm, "추천(%)": f"{re_v:.2f}", "개선(%)": f"{cu_v:.2f}", "Delta": f"{cu_v - re_v:+.2f}"})
-        
-        table_spot.table(pd.DataFrame(d_list))
-        st.success(f"✅ 합계 100.00% 유지 (정제수: {cur_w:.2f}%)")
+    [R&D 설계 로직]
+    1. 정제수 제외 원료 총합 = 1,000포인트 비중 로직 적용.
+    2. 당류는 {s_choice}, 가공방식은 {b_type}를 반영하라.
+    3. 배합표 항목: 원료명, AI(추천%), min(하한%), max(상한%), 사용목적, 주의사항.
+    4. 출력 형식: 반드시 JSON (내용에 'json' 단어 포함 필수).
+    """
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}
+        )
+        return json.loads(response.choices[0].message.content)
+    except Exception as e:
+        st.error(f"AI 분석 엔진 에러: {e}")
+        return None
