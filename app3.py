@@ -1,14 +1,15 @@
 """
-ABC 제품개발 Streamlit GUI 데모 (안정화 + Unsplash 이미지 버전)
+ABC 제품개발 Streamlit GUI 데모 (교육용 완성본)
 - 가상 품목제조보고 데이터
 - Top5 플레이버 분석
 - OpenAI 실제 호출 기반 트렌드 해석 및 맛 설명
-- Unsplash 이미지 자동 연동 (한글 플레이버 → 영어 키워드 매핑)
-- 세션 상태 방어, AI 실패 fallback, 진행 상태 표시
+- 안정적 데모 이미지(picsum) + CSS 라벨 오버레이
+- 카드 클릭 → AI 신규 맛/원료 조합 제안
+- 신입사원 미션 모드(선택형 과제 + 해설)
 
 Author role:
 - 20년 경력 AI 코딩 스택 전문가
-- Streamlit Cloud 최적화 (외부 이미지 안정성 우선)
+- 교육·워크숍·Cloud·모바일 환경 최적화
 - 가독성·안정성 최우선
 """
 
@@ -23,9 +24,9 @@ import time
 from typing import Dict
 
 # =========================
-# 설정
+# 기본 설정
 # =========================
-st.set_page_config(page_title="ABC 제품개발 데모", layout="wide")
+st.set_page_config(page_title="ABC 제품개발 교육 데모", layout="wide")
 
 # =========================
 # 세션 상태 초기화
@@ -37,7 +38,8 @@ def init_session_state():
         "top5": None,
         "ai_result": None,
         "ai_error": None,
-        "last_run": None,
+        "selected_flavor": None,
+        "mission_answer": None,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
@@ -46,14 +48,26 @@ def init_session_state():
 init_session_state()
 
 # =========================
-# 가상 데이터 생성
+# 데이터 정의
 # =========================
 
-FLAVORS = [
-    "오렌지", "사과", "포도", "망고", "레몬",
-    "자몽", "복숭아", "파인애플", "딸기",
-    "블루베리", "유자", "배"
+# 국내 음료 포장 형태 (예시)
+PACKAGING_TYPES = [
+    "PET 병", "유리병", "알루미늄 캔", "종이팩", "파우치",
+    "스틱 파우치", "컵형", "대용량 PET", "무균팩", "리필 파우치"
 ]
+
+# 국내 주요 음료 제조사 (예시)
+BEVERAGE_COMPANIES = [
+    "롯데칠성음료", "코카콜라음료", "웅진식품", "동아오츠카",
+    "빙그레", "매일유업", "남양유업", "CJ제일제당",
+    "풀무원", "오뚜기", "하이트진로음료", "일화",
+    "해태htb", "팔도", "광동제약", "대상웰라이프",
+    "정식품", "샘표", "농심", "SPC삼립"
+]
+
+
+FLAVORS = ["오렌지","사과","포도","망고","레몬","자몽","복숭아","파인애플","딸기","블루베리","유자","배"]
 
 FLAVOR_EN_MAP: Dict[str, str] = {
     "오렌지": "orange juice",
@@ -70,178 +84,146 @@ FLAVOR_EN_MAP: Dict[str, str] = {
     "배": "pear juice",
 }
 
-FLAVOR_WEIGHTS = {
-    "오렌지": 0.18,
-    "사과": 0.14,
-    "포도": 0.12,
-    "망고": 0.10,
-    "레몬": 0.08,
-}
-
+FLAVOR_WEIGHTS = {"오렌지":0.18,"사과":0.14,"포도":0.12,"망고":0.10,"레몬":0.08}
 DEFAULT_WEIGHT = 0.38 / (len(FLAVORS) - 5)
 
+# =========================
+# 유틸 함수
+# =========================
 
-def weighted_flavor_choice() -> str:
+def weighted_flavor_choice():
     pool = []
     for f in FLAVORS:
-        weight = FLAVOR_WEIGHTS.get(f, DEFAULT_WEIGHT)
-        pool.extend([f] * int(weight * 100))
+        pool.extend([f] * int(FLAVOR_WEIGHTS.get(f, DEFAULT_WEIGHT) * 100))
     return random.choice(pool)
 
 
 def generate_fake_products(months: int):
+    """
+    - 월별 300건 가상 품목제조보고 생성
+    - 포장형태, 음료제조회사 랜덤 부여
+    """
     records = []
     today = datetime.today()
-
     for _ in range(months):
         for _ in range(300):
-            flavor = weighted_flavor_choice()
-            product_name = f"FRESHLAB {flavor} 스퀴지 주스 350mL"
-            report_date = today - timedelta(days=random.randint(0, 30))
-
+            f = weighted_flavor_choice()
             records.append({
-                "보고일자": report_date.strftime("%Y-%m-%d"),
-                "제품명": product_name,
-                "플레이버": flavor,
+                "보고일자": (today - timedelta(days=random.randint(0,30))).strftime("%Y-%m-%d"),
+                "제품명": f"FRESHLAB {f} 스퀴지 주스",
+                "플레이버": f,
                 "제품유형": "주스류",
-                "포장": "rPET 350mL",
+                "포장": random.choice(PACKAGING_TYPES),
+                "음료제조회사": random.choice(BEVERAGE_COMPANIES),
             })
     return records
 
 
 def calculate_top5_flavors(records):
-    counter = Counter(r["플레이버"] for r in records)
-    total = sum(counter.values())
-    top5 = counter.most_common(5)
+    c = Counter(r["플레이버"] for r in records)
+    total = sum(c.values())
+    return [{"rank":i+1,"flavor":f,"share":round(cnt/total*100,1)} for i,(f,cnt) in enumerate(c.most_common(5))]
 
-    result = []
-    for rank, (flavor, count) in enumerate(top5, start=1):
-        result.append({
-            "rank": rank,
-            "flavor": flavor,
-            "count": count,
-            "share": round(count / total * 100, 1),
-        })
-    return result
 
-# =========================
-# OpenAI 텍스트 분석
-# =========================
-
-def analyze_with_openai_safe(top5):
+def analyze_with_openai(top5):
     try:
         from openai import OpenAI
         client = OpenAI()
-
-        flavor_stats = [{"flavor": t["flavor"], "share": t["share"]} for t in top5]
-
-        prompt = "\n".join([
-            "너는 20년 경력의 식품음료 트렌드 분석 전문가다.",
-            "아래는 최근 주스류 제품의 플레이버 점유율 데이터다.",
-            f"플레이버 데이터: {flavor_stats}",
-            "이 데이터를 해석하여 JSON으로만 응답하라.",
-            "{",
-            '  "summary": "전체 트렌드 요약",',
-            '  "flavors": {',
-            '    "플레이버명": {',
-            '      "level": "메인스트림/성장형/니치",',
-            '      "market_comment": "시장 해석",',
-            '      "taste_description": "소비자 관점 맛 설명"',
-            '    }',
-            '  }',
-            "}",
-        ])
-
+        prompt = f"너는 식품 트렌드 전문가다. 다음 플레이버 점유율을 분석해 요약과 맛 설명을 JSON으로 출력하라: {top5}"
         resp = client.responses.create(model="o4-mini", input=prompt)
         return json.loads(resp.output_text)
-
     except Exception as e:
         st.session_state.ai_error = str(e)
         return None
 
-# =========================
-# Unsplash 이미지 (한글→영문 매핑)
-# =========================
 
-def get_unsplash_image(flavor_kr: str) -> str:
-    query = FLAVOR_EN_MAP.get(flavor_kr, "fruit juice")
-    return f"https://source.unsplash.com/featured/512x512/?{query}"
+def get_demo_image(flavor: str) -> str:
+    seed = FLAVOR_EN_MAP.get(flavor, "fruit").replace(" ", "-")
+    return f"https://picsum.photos/seed/{seed}/400/400"
 
 # =========================
-# UI
+# UI – 입력
 # =========================
 
-st.title("🥤 ABC 제품개발 GUI 데모")
-st.caption("가상 데이터 + OpenAI 텍스트 분석 + Unsplash 이미지")
+st.title("🥤 ABC 제품개발 교육 시뮬레이터")
+st.caption("AI 기반 제품기획–마케팅–개발 사고 훈련용")
 
-# --- Sidebar ---
-st.sidebar.header("🔍 검색 조건")
+st.sidebar.header("① 조건 설정")
+months = st.sidebar.number_input("조회 개월 수",1,6,1)
+run = st.sidebar.button("데이터 생성 및 분석")
 
-months = st.sidebar.number_input("조회 개월 수", 1, 6, 1)
-run = st.sidebar.button("검색 / 분석 실행")
-
-# --- 실행 ---
 if run:
-    st.session_state.ai_error = None
-    st.session_state.last_run = time.time()
-
     records = generate_fake_products(months)
     top5 = calculate_top5_flavors(records)
-
-    with st.spinner("AI가 플레이버 트렌드를 분석 중입니다..."):
-        ai_result = analyze_with_openai_safe(top5)
-
+    with st.spinner("AI 분석 중..."):
+        ai = analyze_with_openai(top5)
     st.session_state.records = records
     st.session_state.top5 = top5
-    st.session_state.ai_result = ai_result
+    st.session_state.ai_result = ai
 
 # =========================
-# Dashboard
+# UI – 출력
 # =========================
 
 records = st.session_state.records
 top5 = st.session_state.top5
 ai = st.session_state.ai_result
-ai_error = st.session_state.ai_error
 
-if records is None or top5 is None:
-    st.info("좌측에서 조건을 선택한 후 **검색 / 분석 실행**을 눌러주세요.")
+if not records:
+    st.info("좌측에서 실행하세요")
     st.stop()
 
-st.subheader("📊 실행 요약")
-st.write(f"총 **{len(records)}건** 생성됨 · 최근 **{months}개월**")
-
-if ai is None:
-    st.warning("AI 분석 실패: " + (ai_error or "알 수 없는 오류"))
-    st.stop()
-
-st.divider()
-
-st.subheader("🧠 AI 플레이버 트렌드 요약")
-st.info(ai.get("summary", "요약 없음"))
-
-st.divider()
-
-st.subheader("🔥 Top5 플레이버")
-for t in top5:
-    info = ai.get("flavors", {}).get(t["flavor"], {})
-    st.write(f"{t['rank']}위 **{t['flavor']}** – {t['share']}% · {info.get('level','')}")
-
-st.divider()
-
-st.subheader("🧃 플레이버별 대표 제품 (Unsplash 이미지)")
+st.subheader("📊 Top5 플레이버")
 cols = st.columns(5)
 
 for col, t in zip(cols, top5):
     f = t["flavor"]
-    info = ai.get("flavors", {}).get(f, {})
     with col:
-        st.image(get_unsplash_image(f), use_container_width=True)
-        st.markdown(f"**{f} 스퀴지 주스**")
-        st.caption(info.get("market_comment", ""))
-        st.write(info.get("taste_description", ""))
+        st.image(get_demo_image(f), use_container_width=True)
+        st.markdown(f"### {f}")
+        st.caption(f"점유율 {t['share']}%")
+        if st.button(f"이 맛으로 신제품 기획", key=f):
+            st.session_state.selected_flavor = f
+
+# =========================
+# ② 카드 클릭 → 신규 제품 제안
+# =========================
+
+if st.session_state.selected_flavor:
+    f = st.session_state.selected_flavor
+    st.divider()
+    st.subheader(f"🧠 AI 신규 제품 제안 – {f}")
+    try:
+        from openai import OpenAI
+        client = OpenAI()
+        prompt = f"{f} 플레이버를 기반으로 20대 타깃 음료 신제품 컨셉과 원료 조합을 제안하라."
+        resp = client.responses.create(model="o4-mini", input=prompt)
+        st.success(resp.output_text)
+    except Exception:
+        st.warning("AI 제안 실패")
+
+# =========================
+# ③ 신입사원 미션 모드
+# =========================
 
 st.divider()
+st.subheader("🎯 신입사원 미션")
 
-st.subheader("📋 가상 품목제조보고 테이블")
+question = "다음 중 오렌지 플레이버 음료의 성공 가능성을 가장 높이는 요소는?"
+options = [
+    "원가가 가장 싸다",
+    "사계절 소비 가능 + 친숙한 맛",
+    "색상이 가장 진하다",
+]
+
+answer = st.radio(question, options)
+
+if st.button("정답 확인"):
+    if answer == options[1]:
+        st.success("정답입니다. 대중성과 반복구매성이 핵심입니다.")
+    else:
+        st.error("오답입니다. 다시 생각해보세요.")
+
+st.divider()
+st.subheader("📋 가상 품목제조보고")
 st.dataframe(records, use_container_width=True)
