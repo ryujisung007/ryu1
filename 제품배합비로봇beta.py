@@ -565,7 +565,7 @@ if records is None or top5 is None:
 # -------------------------
 # (4) 가상 품목제조보고 테이블 (최상단)
 # -------------------------
-st.subheader("📋 (4) 가상 품목제조보고 (Raw Data)")
+st.subheader("📋 음료류 품목제조보고")
 st.dataframe(records, use_container_width=True, height=380)
 
 # 제조사별 Top 플레이버(요청 2번 이행)
@@ -578,7 +578,7 @@ st.divider()
 # -------------------------
 # (1) Top5 플레이버 카드
 # -------------------------
-st.subheader("🔥 (1) Top5 플레이버 카드")
+st.subheader("🔥 Top5 플레이버")
 if ai_top5 and isinstance(ai_top5, dict):
     st.info(ai_top5.get("summary", ""))
 cols = st.columns(5)
@@ -599,10 +599,10 @@ st.divider()
 # -------------------------
 # (2) 좌/우 분할: 컨셉(좌) + 배합비(우)
 # -------------------------
-st.subheader("🧠🧪 (2) AI 신규 제품 제안 & 배합비 설계 (좌/우 분할)")
+st.subheader("🧠🧪 AI 제품 제안 & 배합비 설계")
 
 if not st.session_state.selected_flavor:
-    st.info("위 Top5 카드에서 **이 맛으로 신제품 기획**을 눌러주세요.")
+    st.info("위 Top5 카드에서 **이 맛으로 신제품 개발**을 눌러주세요.")
 else:
     f = st.session_state.selected_flavor
     flavor_key = hash_flavor(f, top5)
@@ -638,9 +638,9 @@ st.divider()
 # -------------------------
 # (3) 신입사원 미션 (제조공정 포함)
 # -------------------------
-st.subheader("🎯 (3) 신입사원 미션 (기획·배합 + 제조공정 포함)")
+st.subheader("🎯리스크해결 미션")
 
-tab_a, tab_b = st.tabs(["미션 A: 기획·배합 판단", "미션 B: 음료 제조공정 이해"])
+tab_a, tab_b = st.tabs(["미션 A: 설계 판단", "미션 B: 공정 이해"])
 
 with tab_a:
     st.markdown("**문제 A1**. 아래 중 *대량생산/재현성/리스크* 관점에서 가장 적합한 안을 고르세요.")
