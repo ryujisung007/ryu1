@@ -7,7 +7,7 @@ import os
 st.set_page_config(page_title="ABC 제품개발 로봇 Gamma", layout="wide")
 
 # [수정] 파일 존재 확인 후 자동 로드
-DB_PATH = "과일원료_DB.csv"
+DB_PATH = "ingredients_db.csv"
 
 if os.path.exists(DB_PATH):
     # 헤더 구조가 복잡하므로 2번째 행(index 0)을 컬럼으로 사용
@@ -16,7 +16,7 @@ if os.path.exists(DB_PATH):
     db_df = db_df.drop(0).reset_index(drop=True)
     st.sidebar.success(f"✅ 원료 DB({len(db_df)}종) 로드 완료")
 else:
-    st.sidebar.error("❌ '과일원료_DB.csv' 파일을 찾을 수 없습니다.")
+    st.sidebar.error("❌ 'ingredients_db.csv' 파일을 찾을 수 없습니다.")
     st.stop()
 
 if "selected_flavor" not in st.session_state: st.session_state.selected_flavor = None
