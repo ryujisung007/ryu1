@@ -1,200 +1,230 @@
 """
-ABC 제품개발 교육용 Streamlit 앱 (AI 미션 자동 생성 포함 최종본)
+ABC 제품개발 교육용 Streamlit 앱
+안정 레이아웃 + 빈 상태 UX + 진행 단계 표시 적용
 """
 
 from __future__ import annotations
 
+import json
 import random
+import hashlib
 from collections import Counter
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import Any, Dict, List
 
 import streamlit as st
-import matplotlib.pyplot as plt
+
 
 # =========================
 # 기본 설정
 # =========================
 st.set_page_config(page_title="ABC 제품개발 교육 시뮬레이터", layout="wide")
 
+
 # =========================
-# 세션 초기화
+# 상수 정의
+# =========================
+FLAVORS = [
+    "오렌지", "사과", "포도", "망고", "레몬",
+    "자몽", "복숭아", "파인애플", "딸기",
+    "블루베리", "유자", "배"
+]
+
+PACKAGING_TYPES = [
+    "PET 병", "유리병", "알루미늄 캔", "종이팩",
+    "무균팩", "파우치", "리필 파우치"
+]
+
+BEVERAGE_COMPANIES = [
+    "롯데칠성음료", "코카콜라음료", "웅진식품", "동아오츠카",
+    "빙그레", "매일유업", "CJ제일제당", "풀무원",
+    "광동제약", "하이트진로음료", "팔도", "일화"
+]
+
+PRODUCT_PREFIX = ["FRESHLAB", "VITAPOP", "NATURA", "JUICY+", "FRESHWAY"]
+PRODUCT_STYLE = ["데일리 주스", "저당 클린 드링크", "비타민 부스트", "리프레시 음료"]
+
+
+# =========================
+# 세션 상태 초기화
 # =========================
 def init_state():
     defaults = {
         "records": None,
         "top5": None,
         "selected_flavor": None,
-        "role": "통합(ABC)",
-        "mission": None,
+        "step": 0,  # 0: 미실행, 1: 데이터, 2: 플레이버 선택, 3: 컨셉/배합
     }
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
 
+
 init_state()
 
-# =========================
-# 상수
-# =========================
-ROLES = ["통합(ABC)", "A: 기획", "B: 마케팅", "C: 연구/개발"]
-FLAVORS = ["오렌지", "사과", "포도", "망고", "레몬", "자몽", "복숭아", "파인애플"]
 
 # =========================
-# 데이터 생성
+# 유틸 함수
 # =========================
-def generate_records(months: int):
-    rows = []
+def random_product_name(flavor: str) -> str:
+    brand = random.choice(PRODUCT_PREFIX)
+    style = random.choice(PRODUCT_STYLE)
+    if random.random() < 0.35:
+        other = random.choice([f for f in FLAVORS if f != flavor])
+        name = f"{flavor}·{other}"
+    else:
+        name = flavor
+    return f"{brand} {name} {style}"
+
+
+def get_demo_image(flavor: str) -> str:
+    return f"https://picsum.photos/seed/{flavor}/420/420"
+
+
+def generate_fake_products(months: int) -> List[Dict[str, Any]]:
     today = datetime.today()
-    for _ in range(months * 300):
-        f = random.choice(FLAVORS)
-        rows.append({
-            "보고일자": (today - timedelta(days=random.randint(0, 30))).strftime("%Y-%m-%d"),
-            "제품명": f"{f} 블렌드 주스",
-            "플레이버": f,
-            "제품유형": "주스류",
-            "포장": random.choice(["PET", "캔", "종이팩"]),
-            "제조회사": random.choice(["롯데", "웅진", "빙그레", "코카콜라"]),
-        })
-    return rows
+    records = []
+    for _ in range(months):
+        for _ in range(300):
+            flavor = random.choice(FLAVORS)
+            records.append({
+                "보고일자": (today - timedelta(days=random.randint(0, 30))).strftime("%Y-%m-%d"),
+                "제품명": random_product_name(flavor),
+                "플레이버": flavor,
+                "제품유형": "주스류",
+                "포장": random.choice(PACKAGING_TYPES),
+                "음료제조회사": random.choice(BEVERAGE_COMPANIES),
+            })
+    return records
 
-def calc_top5(records):
+
+def calculate_top5(records):
     c = Counter(r["플레이버"] for r in records)
-    total = sum(c.values())
-    return [{"flavor": f, "share": round(v / total * 100, 1)} for f, v in c.most_common(5)]
+    total = sum(c.values()) or 1
+    return [{"flavor": f, "share": round(cnt / total * 100, 1)} for f, cnt in c.most_common(5)]
+
 
 # =========================
-# 차트
-# =========================
-def plot_top5(top5):
-    fig, ax = plt.subplots(figsize=(5, 3))
-    ax.barh([t["flavor"] for t in top5], [t["share"] for t in top5])
-    ax.invert_yaxis()
-    st.pyplot(fig)
-
-# =========================
-# AI 미션 생성 (로컬 자동)
-# =========================
-def generate_ai_mission(role: str, flavor: str) -> Dict[str, Any]:
-    if role.startswith("A"):
-        return {
-            "question": f"{flavor} 기반 신제품의 핵심 USP로 가장 적절한 것은?",
-            "options": [
-                "원가 최소화",
-                "관능 차별화",
-                "패키지 색상",
-                "유통 마진",
-            ],
-            "answer": 1,
-            "explain": "기획 관점에서는 소비자 체감 가치가 핵심입니다."
-        }
-
-    if role.startswith("B"):
-        return {
-            "question": f"{flavor} 주스를 20대 타깃으로 마케팅할 때 가장 중요한 메시지는?",
-            "options": [
-                "저당",
-                "상큼함",
-                "대용량",
-                "전통성",
-            ],
-            "answer": 1,
-            "explain": "젊은 층은 즉각적 맛 인지가 중요합니다."
-        }
-
-    if role.startswith("C"):
-        return {
-            "question": f"{flavor} 과즙 음료 제조 시 가장 먼저 관리해야 할 공정 변수는?",
-            "options": [
-                "라벨 디자인",
-                "pH",
-                "병 색상",
-                "광택",
-            ],
-            "answer": 1,
-            "explain": "pH는 미생물 안정성과 관능에 직접적 영향을 줍니다."
-        }
-
-    # 통합
-    return {
-        "question": f"{flavor} 신제품 개발 시 가장 우선 고려해야 할 요소는?",
-        "options": [
-            "원가",
-            "시장성",
-            "공정 안정성",
-            "모두 중요",
-        ],
-        "answer": 3,
-        "explain": "ABC 통합 관점이 필요합니다."
-    }
-
-# =========================
-# UI
+# UI: 타이틀 & 진행 단계
 # =========================
 st.title("🥤 ABC 제품개발 교육 시뮬레이터")
+st.caption("데이터 → 트렌드 → 컨셉/배합 → 제조공정 이해")
 
-st.sidebar.header("설정")
-st.session_state.role = st.sidebar.radio("직무 선택", ROLES)
-months = st.sidebar.number_input("조회 개월", 1, 6, 1)
-
-if st.sidebar.button("▶ 실행"):
-    st.session_state.records = generate_records(months)
-    st.session_state.top5 = calc_top5(st.session_state.records)
-    st.session_state.selected_flavor = None
-    st.session_state.mission = None
-
-# ---------- (4) 테이블 ----------
-st.subheader("📋 품목제조보고")
-if st.session_state.records:
-    st.dataframe(st.session_state.records, use_container_width=True)
-else:
-    st.info("실행 버튼을 누르세요.")
-
-st.divider()
-
-# ---------- (1) Top5 ----------
-st.subheader("🔥 Top5 플레이버")
-if st.session_state.top5:
-    plot_top5(st.session_state.top5)
-    cols = st.columns(5)
-    for col, t in zip(cols, st.session_state.top5):
-        with col:
-            if st.button(t["flavor"]):
-                st.session_state.selected_flavor = t["flavor"]
-else:
-    st.info("Top5 없음")
-
-st.divider()
-
-# ---------- (2) 분석 ----------
-st.subheader("🧠 직무별 분석")
-if st.session_state.selected_flavor:
-    st.write(f"선택 플레이버: **{st.session_state.selected_flavor}**")
-    st.write(f"직무: **{st.session_state.role}**")
-else:
-    st.info("플레이버를 선택하세요.")
-
-st.divider()
-
-# ---------- (3) AI 생성 미션 ----------
-st.subheader("🎯 AI 생성 미션")
-
-if st.session_state.selected_flavor:
-    if st.session_state.mission is None:
-        st.session_state.mission = generate_ai_mission(
-            st.session_state.role,
-            st.session_state.selected_flavor
-        )
-
-    m = st.session_state.mission
-    st.markdown(f"**문제**: {m['question']}")
-    choice = st.radio("선택", m["options"])
-
-    if st.button("정답 확인"):
-        if m["options"].index(choice) == m["answer"]:
-            st.success("정답입니다.")
+steps = ["① 데이터 생성", "② 플레이버 선택", "③ 컨셉·배합 설계", "④ 제조공정 미션"]
+cols = st.columns(4)
+for i, (col, label) in enumerate(zip(cols, steps), start=1):
+    with col:
+        if st.session_state.step >= i:
+            st.success(label)
         else:
-            st.error("오답입니다.")
-        st.info(f"해설: {m['explain']}")
+            st.info(label)
+
+
+# =========================
+# Sidebar
+# =========================
+st.sidebar.header("조건 설정")
+months = st.sidebar.slider("조회 개월 수", 1, 6, 1)
+run = st.sidebar.button("▶ 실행")
+
+if run:
+    records = generate_fake_products(months)
+    st.session_state.records = records
+    st.session_state.top5 = calculate_top5(records)
+    st.session_state.selected_flavor = None
+    st.session_state.step = 1
+
+
+records = st.session_state.records
+top5 = st.session_state.top5
+
+
+# =========================
+# (4) 품목제조보고 테이블
+# =========================
+st.subheader("📋 음료류 품목제조보고")
+
+if records:
+    st.dataframe(records, use_container_width=True, height=320)
 else:
-    st.info("플레이버 선택 후 미션이 생성됩니다.")
+    st.info("좌측에서 조건을 설정하고 실행하면 데이터가 생성됩니다.")
+
+st.divider()
+
+
+# =========================
+# (1) Top5 플레이버 카드
+# =========================
+st.subheader("🔥 Top5 플레이버")
+
+if not top5:
+    st.info("데이터 생성 후 Top5 플레이버가 표시됩니다.")
+else:
+    cols = st.columns(5)
+    for col, t in zip(cols, top5):
+        f = t["flavor"]
+        selected = (st.session_state.selected_flavor == f)
+        with col:
+            st.image(get_demo_image(f), use_container_width=True)
+            st.markdown(f"**{f}**")
+            st.caption(f"점유율 {t['share']}%")
+
+            if selected:
+                st.success("선택됨")
+            else:
+                if st.button("이 맛으로 기획", key=f"pick_{f}"):
+                    st.session_state.selected_flavor = f
+                    st.session_state.step = 2
+
+st.divider()
+
+
+# =========================
+# (2) 좌/우 분할: 컨셉 / 배합비
+# =========================
+st.subheader("🧠🧪 AI 신규 제품 제안 & 배합비 설계")
+
+if not st.session_state.selected_flavor:
+    st.info("Top5 플레이버 중 하나를 선택하면 컨셉과 배합비가 표시됩니다.")
+else:
+    st.session_state.step = 3
+    left, right = st.columns(2)
+
+    with left:
+        st.markdown(f"### 🧠 제품 컨셉 – {st.session_state.selected_flavor}")
+        st.write("- 데일리 음용에 적합한 상큼한 포지션")
+        st.write("- 저당/클린 트렌드 반영")
+        st.write("- 20~30대 타깃 반복구매 설계")
+
+    with right:
+        st.markdown("### 🧪 배합비(예시)")
+        st.dataframe([
+            {"원재료": "정제수", "기존": 83.0, "AI A": 80.0, "AI B": 81.0},
+            {"원재료": "과즙", "기존": 10.0, "AI A": 12.0, "AI B": 13.0},
+            {"원재료": "설탕", "기존": 5.0, "AI A": 3.0, "AI B": 4.0},
+            {"원재료": "기타", "기존": 2.0, "AI A": 5.0, "AI B": 2.0},
+        ], use_container_width=True)
+
+st.divider()
+
+
+# =========================
+# (3) 제조공정 미션
+# =========================
+st.subheader("🎯 신입사원 제조공정 미션")
+
+st.markdown("**문제**. NFC 과즙 음료의 올바른 공정 순서는?")
+answer = st.radio(
+    "선택",
+    ["원료계량 → 살균 → 혼합 → 충전",
+     "원료계량 → 혼합 → 살균 → 충전",
+     "혼합 → 충전 → 살균 → 냉각"]
+)
+
+if st.button("정답 확인"):
+    if answer == "원료계량 → 혼합 → 살균 → 충전":
+        st.success("정답입니다. 혼합 후 살균이 기본 공정입니다.")
+    else:
+        st.error("오답입니다. 공정 흐름을 다시 확인하세요.")
+
+st.caption("※ 교육용 미션: 공정 흐름·품질·포장 연계를 이해하는 것이 목표입니다.")
