@@ -112,19 +112,44 @@ def generate_ai_mission(role, flavor):
 # =========================
 # 미션 UI
 # =========================
-st.subheader("🎯 AI 생성 미션")
+# =========================
+# (3) 미션 — 항상 렌더링 (완전 독립 블록)
+# =========================
+st.divider()
+st.subheader("🎯 AI 생성 미션 (제조공정·배합·품질)")
 
-role = st.selectbox("직무 선택", ["A.기획", "B.마케팅", "C.연구개발"])
-if st.button("AI 미션 생성"):
-    st.session_state.mission = generate_ai_mission(role, st.session_state.selected_flavor)
+# 세션 방어
+if "mission_data" not in st.session_state or st.session_state.mission_data is None:
+    st.info("좌측에서 ▶ 실행을 누르면 AI 미션이 생성됩니다.")
+else:
+    mission = st.session_state.mission_data
 
-m = st.session_state.get("mission")
-if m:
-    st.markdown(f"**[{m['type']}] {m['question']}**")
-    ans = st.radio("정답 선택", m["options"])
-    if st.button("제출"):
-        if ans == m["options"][m["answer_index"]]:
-            st.success("정답입니다")
+    user_answers = []
+    correct = 0
+
+    for i, q in enumerate(mission.get("questions", []), start=1):
+        st.markdown(f"**Q{i}. {q.get('q','')}**")
+        ans = st.radio(
+            label="",
+            options=q.get("options", []),
+            key=f"mission_q_{i}",
+        )
+        user_answers.append(ans)
+
+    if st.button("미션 제출 / 채점", key="submit_mission"):
+        for i, q in enumerate(mission.get("questions", [])):
+            try:
+                if q["options"].index(user_answers[i]) == q["answer"]:
+                    correct += 1
+            except Exception:
+                pass
+
+        st.session_state.mission_submitted = True
+        st.session_state.mission_score = correct
+
+    if st.session_state.get("mission_submitted"):
+        st.metric("미션 점수", st.session_state.get("mission_score", 0))
+        if st.session_state.mission_score == len(mission.get("questions", [])):
+            st.success("🎉 훌륭합니다. 제조·배합·공정 이해도가 매우 높습니다.")
         else:
-            st.error("오답입니다")
-        st.info(m["explanation"])
+            st.warning("📝 일부 보완이 필요합니다. 공정 흐름과 품질 포인트를 다시 점검하세요.")
