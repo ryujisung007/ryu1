@@ -1,14 +1,16 @@
 """
-ABC 제품개발 교육용 Streamlit 앱 (이미지 의미 개선 버전)
-- 플레이버 연관 Unsplash 이미지 적용
+ABC 제품개발 교육용 Streamlit 앱 (안정화 최종본)
+- 이미지 안정화 (picsum)
 - 제품명 다양화
-- AI 신규 제품 제안 & 배합비 설계 (좌/우 분할)
+- AI 신규 제품 제안 & 배합비 설계 (좌/우 분할) 복구
+- 제조공정 포함 신입사원 미션
 """
 
 from __future__ import annotations
 
 import random
 import json
+import hashlib
 from collections import Counter
 from datetime import datetime, timedelta
 from typing import Dict, List
@@ -96,10 +98,9 @@ def random_product_name(flavor: str) -> str:
     return f"{prefix} {name} {style}"
 
 
-def get_flavor_image(flavor_kr: str) -> str:
-    flavor_en = FLAVOR_EN.get(flavor_kr, "fruit")
-    query = f"{flavor_en},juice,drink,beverage"
-    return f"https://source.unsplash.com/featured/480x480/?{query}"
+def get_image_url(flavor: str) -> str:
+    seed = FLAVOR_EN.get(flavor, "fruit")
+    return f"https://picsum.photos/seed/{seed}-drink/420/420"
 
 
 def generate_fake_products(months: int, seed: int) -> List[Dict]:
@@ -128,10 +129,61 @@ def calculate_top5(records):
 
 
 # =========================
+# AI 로직 (실패 시 fallback)
+# =========================
+def ai_concept_and_formula(flavor: str):
+    try:
+        from openai import OpenAI
+        client = OpenAI()
+
+        prompt = f"""
+너는 20년차 음료 제품개발 전문가다.
+
+플레이버: {flavor}
+
+1. 신제품 컨셉 (제품명 포함)
+2. 핵심 USP 3가지
+3. 마케팅 포인트 3가지
+4. 음료 배합비 제안 (원재료 10개 이상)
+   - 기존배합비 / AI 제안 A / AI 제안 B
+   - 각각 합계 100%
+
+JSON으로만 출력하라.
+"""
+
+        res = client.responses.create(model="o4-mini", input=prompt)
+        return json.loads(res.output_text)
+
+    except Exception:
+        # fallback
+        ingredients = [
+            "정제수", f"{flavor} 과즙", "설탕", "구연산",
+            "향료", "비타민C", "펙틴", "CMC",
+            "클라우드", "소금"
+        ]
+        base = [80, 10, 5, 0.3, 0.4, 0.1, 0.1, 0.05, 3.95, 0.1]
+
+        def variant(delta):
+            return [round(v + d, 2) for v, d in zip(base, delta)]
+
+        return {
+            "concept": f"{flavor} 기반 데일리 저당 음료",
+            "usp": ["클린 라벨", "산미 밸런스", "반복구매"],
+            "marketing": ["출근 루틴", "운동 후", "저당 강조"],
+            "formula": {
+                "ingredients": ingredients,
+                "기존": base,
+                "A": variant([-2, 1, -2, 0, 0, 0, 0, 0, 3, 0]),
+                "B": variant([-1, 2, -1, 0, 0.2, 0, 0, 0, -0.2, 0]),
+            }
+        }
+
+
+# =========================
 # UI
 # =========================
 st.title("🥤 ABC 제품개발 교육 시뮬레이터")
-st.caption("플레이버 의미 기반 이미지 · AI 제품기획 · 배합비 설계")
+st.caption("데이터 → 트렌드 → AI 컨셉 → 배합비 → 제조공정 사고 훈련")
 
 st.sidebar.header("조건 설정")
 months = st.sidebar.slider("조회 개월 수", 1, 6, 1)
@@ -143,6 +195,8 @@ if run:
     st.session_state.records = records
     st.session_state.top5 = calculate_top5(records)
     st.session_state.selected_flavor = None
+    st.session_state.ai_concept = None
+    st.session_state.ai_formula = None
 
 records = st.session_state.records
 top5 = st.session_state.top5
@@ -151,11 +205,71 @@ if not records:
     st.info("좌측에서 조건을 설정하고 실행하세요.")
     st.stop()
 
-st.subheader("Top 플레이버 트렌드")
+# --- 테이블 ---
+st.subheader("가상 품목제조보고 데이터")
+st.dataframe(records, use_container_width=True, height=350)
 
+st.divider()
+
+# --- Top5 카드 ---
+st.subheader("Top 플레이버 트렌드")
 cols = st.columns(5)
+
 for col, t in zip(cols, top5):
     with col:
-        st.image(get_flavor_image(t["flavor"]), use_container_width=True)
+        st.image(get_image_url(t["flavor"]), use_container_width=True)
         st.markdown(f"**{t['flavor']}**")
         st.caption(f"점유율 {t['share']}%")
+        if st.button("이 맛으로 신제품 기획", key=t["flavor"]):
+            st.session_state.selected_flavor = t["flavor"]
+            data = ai_concept_and_formula(t["flavor"])
+            st.session_state.ai_concept = data
+            st.session_state.ai_formula = data.get("formula")
+
+# --- AI 컨셉 & 배합비 (좌/우 분할) ---
+if st.session_state.selected_flavor:
+    st.divider()
+    left, right = st.columns(2)
+
+    with left:
+        st.subheader("AI 신규 제품 컨셉")
+        data = st.session_state.ai_concept
+        st.markdown(f"**컨셉**: {data['concept']}")
+        st.markdown("**USP**")
+        for u in data["usp"]:
+            st.write(f"- {u}")
+        st.markdown("**마케팅 포인트**")
+        for m in data["marketing"]:
+            st.write(f"- {m}")
+
+    with right:
+        st.subheader("AI 추천 음료 배합비")
+        f = st.session_state.ai_formula
+        table = []
+        for i, ing in enumerate(f["ingredients"]):
+            table.append({
+                "원재료": ing,
+                "기존배합비(%)": f["기존"][i],
+                "AI 제안 A(%)": f["A"][i],
+                "AI 제안 B(%)": f["B"][i],
+            })
+        st.dataframe(table, use_container_width=True)
+
+# --- 신입사원 미션 ---
+st.divider()
+st.subheader("신입사원 미션 – 음료 제조공정")
+
+q = st.radio(
+    "NFC 과즙 음료의 올바른 제조공정 순서는?",
+    [
+        "원료계량 → 혼합 → 살균 → 충전",
+        "원료계량 → 살균 → 혼합 → 충전",
+        "혼합 → 충전 → 살균 → 포장",
+    ]
+)
+
+if st.button("정답 확인"):
+    if q.startswith("원료계량 → 혼합"):
+        st.success("정답입니다. 혼합 후 살균이 기본 공정입니다.")
+    else:
+        st.error("오답입니다. 공정 흐름을 다시 검토하세요.")
