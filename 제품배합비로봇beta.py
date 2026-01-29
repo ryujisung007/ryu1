@@ -67,5 +67,15 @@ FLAVOR_COLOR = {
 }
 
 PRODUCT_PREFIX = ["FRESHLAB", "VITAPOP", "NATURA", "JUICY+", "FRESHWAY"]
+
+# 수정 후 (정상)
 PRODUCT_STYLE = [
-    "데일리 주스", "저당 클
+    "데일리 주스", 
+    "저당 클린 드링크", 
+    "비타민 부스트",
+    "리프레시 음료", 
+    "클린 주스", 
+    "이뮨 부스트",
+    "모닝 루틴 드링크", 
+    "애프터짐 리커버리"
+]
