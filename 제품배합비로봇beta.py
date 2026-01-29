@@ -1,200 +1,223 @@
 """
-ABC 제품개발 교육용 Streamlit 앱 (AI 미션 자동 생성 포함 최종본)
+ABC 제품개발 교육용 Streamlit 앱 (방어 설계 최종본)
+- AI 응답 구조 불일치로 인한 KeyError 완전 방지
+- AI 신규 제품 제안 & 배합비 설계 (좌/우 분할)
+- 플레이버 의미 기반 이미지
+- 제품명 다양화
 """
 
 from __future__ import annotations
 
 import random
+import json
 from collections import Counter
 from datetime import datetime, timedelta
-from typing import List, Dict, Any
+from typing import Dict, List
 
 import streamlit as st
-import matplotlib.pyplot as plt
+
 
 # =========================
 # 기본 설정
 # =========================
 st.set_page_config(page_title="ABC 제품개발 교육 시뮬레이터", layout="wide")
 
+
 # =========================
-# 세션 초기화
+# 상수 정의
+# =========================
+FLAVORS = [
+    "오렌지", "사과", "포도", "망고", "레몬",
+    "자몽", "복숭아", "파인애플", "딸기",
+    "블루베리", "유자", "배"
+]
+
+FLAVOR_EN = {
+    "오렌지": "orange",
+    "사과": "apple",
+    "포도": "grape",
+    "망고": "mango",
+    "레몬": "lemon",
+    "자몽": "grapefruit",
+    "복숭아": "peach",
+    "파인애플": "pineapple",
+    "딸기": "strawberry",
+    "블루베리": "blueberry",
+    "유자": "yuzu",
+    "배": "pear",
+}
+
+PRODUCT_PREFIX = ["FRESHLAB", "VITAPOP", "NATURA", "FRESHWAY", "JUICY+"]
+PRODUCT_STYLE = ["데일리 주스", "저당 드링크", "비타민 부스트", "리프레시 음료", "클린 주스"]
+
+
+# =========================
+# 세션 상태 초기화
 # =========================
 def init_state():
     defaults = {
         "records": None,
         "top5": None,
         "selected_flavor": None,
-        "role": "통합(ABC)",
-        "mission": None,
+        "ai_result": None,
     }
     for k, v in defaults.items():
         if k not in st.session_state:
             st.session_state[k] = v
 
+
 init_state()
 
-# =========================
-# 상수
-# =========================
-ROLES = ["통합(ABC)", "A: 기획", "B: 마케팅", "C: 연구/개발"]
-FLAVORS = ["오렌지", "사과", "포도", "망고", "레몬", "자몽", "복숭아", "파인애플"]
 
 # =========================
-# 데이터 생성
+# 유틸 함수
 # =========================
-def generate_records(months: int):
-    rows = []
+def random_product_name(flavor: str) -> str:
+    prefix = random.choice(PRODUCT_PREFIX)
+    style = random.choice(PRODUCT_STYLE)
+    if random.random() < 0.35:
+        other = random.choice([f for f in FLAVORS if f != flavor])
+        name = f"{flavor}·{other}"
+    else:
+        name = flavor
+    return f"{prefix} {name} {style}"
+
+
+def get_flavor_image(flavor: str) -> str:
+    flavor_en = FLAVOR_EN.get(flavor, "fruit")
+    return f"https://source.unsplash.com/featured/480x480/?{flavor_en},juice,drink"
+
+
+def generate_fake_products(months: int) -> List[Dict]:
     today = datetime.today()
-    for _ in range(months * 300):
-        f = random.choice(FLAVORS)
-        rows.append({
-            "보고일자": (today - timedelta(days=random.randint(0, 30))).strftime("%Y-%m-%d"),
-            "제품명": f"{f} 블렌드 주스",
-            "플레이버": f,
-            "제품유형": "주스류",
-            "포장": random.choice(["PET", "캔", "종이팩"]),
-            "제조회사": random.choice(["롯데", "웅진", "빙그레", "코카콜라"]),
-        })
-    return rows
+    records = []
+    for _ in range(months):
+        for _ in range(300):
+            flavor = random.choice(FLAVORS)
+            records.append({
+                "보고일자": (today - timedelta(days=random.randint(0, 30))).strftime("%Y-%m-%d"),
+                "제품명": random_product_name(flavor),
+                "플레이버": flavor,
+            })
+    return records
 
-def calc_top5(records):
+
+def calculate_top5(records):
     c = Counter(r["플레이버"] for r in records)
     total = sum(c.values())
-    return [{"flavor": f, "share": round(v / total * 100, 1)} for f, v in c.most_common(5)]
+    return [{"flavor": f, "share": round(cnt / total * 100, 1)} for f, cnt in c.most_common(5)]
+
 
 # =========================
-# 차트
+# AI 응답 정규화 (핵심)
 # =========================
-def plot_top5(top5):
-    fig, ax = plt.subplots(figsize=(5, 3))
-    ax.barh([t["flavor"] for t in top5], [t["share"] for t in top5])
-    ax.invert_yaxis()
-    st.pyplot(fig)
-
-# =========================
-# AI 미션 생성 (로컬 자동)
-# =========================
-def generate_ai_mission(role: str, flavor: str) -> Dict[str, Any]:
-    if role.startswith("A"):
-        return {
-            "question": f"{flavor} 기반 신제품의 핵심 USP로 가장 적절한 것은?",
-            "options": [
-                "원가 최소화",
-                "관능 차별화",
-                "패키지 색상",
-                "유통 마진",
-            ],
-            "answer": 1,
-            "explain": "기획 관점에서는 소비자 체감 가치가 핵심입니다."
-        }
-
-    if role.startswith("B"):
-        return {
-            "question": f"{flavor} 주스를 20대 타깃으로 마케팅할 때 가장 중요한 메시지는?",
-            "options": [
-                "저당",
-                "상큼함",
-                "대용량",
-                "전통성",
-            ],
-            "answer": 1,
-            "explain": "젊은 층은 즉각적 맛 인지가 중요합니다."
-        }
-
-    if role.startswith("C"):
-        return {
-            "question": f"{flavor} 과즙 음료 제조 시 가장 먼저 관리해야 할 공정 변수는?",
-            "options": [
-                "라벨 디자인",
-                "pH",
-                "병 색상",
-                "광택",
-            ],
-            "answer": 1,
-            "explain": "pH는 미생물 안정성과 관능에 직접적 영향을 줍니다."
-        }
-
-    # 통합
+def normalize_ai_result(raw: Dict, flavor: str) -> Dict:
+    """
+    어떤 형태의 AI 응답이 와도
+    UI에서 항상 동일한 key로 접근 가능하게 만든다.
+    """
     return {
-        "question": f"{flavor} 신제품 개발 시 가장 우선 고려해야 할 요소는?",
-        "options": [
-            "원가",
-            "시장성",
-            "공정 안정성",
-            "모두 중요",
-        ],
-        "answer": 3,
-        "explain": "ABC 통합 관점이 필요합니다."
+        "concept": raw.get("concept", f"{flavor} 기반 데일리 음료"),
+        "usp": raw.get("usp", ["데일리 음용", "트렌드 반영", "안정적 원가"]),
+        "marketing": raw.get("marketing", ["출근 루틴", "저당 강조", "친환경 이미지"]),
+        "formula": raw.get("formula", {
+            "ingredients": [
+                "정제수", f"{flavor} 과즙", "설탕", "구연산",
+                "향료", "비타민C", "펙틴", "CMC",
+                "클라우드", "소금"
+            ],
+            "기존": [80, 10, 5, 0.3, 0.4, 0.1, 0.1, 0.05, 3.95, 0.1],
+            "A":    [78, 12, 3, 0.3, 0.4, 0.1, 0.1, 0.05, 5.95, 0.1],
+            "B":    [79, 11, 4, 0.3, 0.6, 0.1, 0.1, 0.05, 4.75, 0.1],
+        })
     }
+
+
+def ai_concept_and_formula(flavor: str) -> Dict:
+    """
+    AI 호출 + 실패 대비
+    """
+    try:
+        from openai import OpenAI
+        client = OpenAI()
+
+        prompt = f"""
+너는 20년차 음료 제품개발 전문가다.
+플레이버: {flavor}
+
+1. 제품 컨셉
+2. USP 3가지
+3. 마케팅 포인트 3가지
+4. 배합비 (기존 / A / B)
+
+JSON으로만 출력하라.
+"""
+        res = client.responses.create(model="o4-mini", input=prompt)
+        raw = json.loads(res.output_text)
+    except Exception:
+        raw = {}
+
+    return normalize_ai_result(raw, flavor)
+
 
 # =========================
 # UI
 # =========================
 st.title("🥤 ABC 제품개발 교육 시뮬레이터")
+st.caption("AI 응답 방어 설계 적용")
 
-st.sidebar.header("설정")
-st.session_state.role = st.sidebar.radio("직무 선택", ROLES)
-months = st.sidebar.number_input("조회 개월", 1, 6, 1)
+months = st.sidebar.slider("조회 개월 수", 1, 6, 1)
+run = st.sidebar.button("실행")
 
-if st.sidebar.button("▶ 실행"):
-    st.session_state.records = generate_records(months)
-    st.session_state.top5 = calc_top5(st.session_state.records)
+if run:
+    records = generate_fake_products(months)
+    st.session_state.records = records
+    st.session_state.top5 = calculate_top5(records)
     st.session_state.selected_flavor = None
-    st.session_state.mission = None
 
-# ---------- (4) 테이블 ----------
-st.subheader("📋 품목제조보고")
-if st.session_state.records:
-    st.dataframe(st.session_state.records, use_container_width=True)
-else:
-    st.info("실행 버튼을 누르세요.")
+records = st.session_state.records
+top5 = st.session_state.top5
 
-st.divider()
+if not records:
+    st.stop()
 
-# ---------- (1) Top5 ----------
-st.subheader("🔥 Top5 플레이버")
-if st.session_state.top5:
-    plot_top5(st.session_state.top5)
-    cols = st.columns(5)
-    for col, t in zip(cols, st.session_state.top5):
-        with col:
-            if st.button(t["flavor"]):
-                st.session_state.selected_flavor = t["flavor"]
-else:
-    st.info("Top5 없음")
+st.subheader("Top 플레이버")
 
-st.divider()
-
-# ---------- (2) 분석 ----------
-st.subheader("🧠 직무별 분석")
-if st.session_state.selected_flavor:
-    st.write(f"선택 플레이버: **{st.session_state.selected_flavor}**")
-    st.write(f"직무: **{st.session_state.role}**")
-else:
-    st.info("플레이버를 선택하세요.")
-
-st.divider()
-
-# ---------- (3) AI 생성 미션 ----------
-st.subheader("🎯 AI 생성 미션")
+cols = st.columns(5)
+for col, t in zip(cols, top5):
+    with col:
+        st.image(get_flavor_image(t["flavor"]), use_container_width=True)
+        st.markdown(f"**{t['flavor']}**")
+        st.caption(f"{t['share']}%")
+        if st.button("선택", key=t["flavor"]):
+            st.session_state.selected_flavor = t["flavor"]
+            st.session_state.ai_result = ai_concept_and_formula(t["flavor"])
 
 if st.session_state.selected_flavor:
-    if st.session_state.mission is None:
-        st.session_state.mission = generate_ai_mission(
-            st.session_state.role,
-            st.session_state.selected_flavor
-        )
+    data = st.session_state.ai_result
 
-    m = st.session_state.mission
-    st.markdown(f"**문제**: {m['question']}")
-    choice = st.radio("선택", m["options"])
+    st.divider()
+    left, right = st.columns(2)
 
-    if st.button("정답 확인"):
-        if m["options"].index(choice) == m["answer"]:
-            st.success("정답입니다.")
-        else:
-            st.error("오답입니다.")
-        st.info(f"해설: {m['explain']}")
-else:
-    st.info("플레이버 선택 후 미션이 생성됩니다.")
+    with left:
+        st.subheader("AI 제품 컨셉")
+        st.markdown(f"**컨셉**: {data.get('concept')}")
+        st.markdown("**USP**")
+        for u in data.get("usp", []):
+            st.write(f"- {u}")
+        st.markdown("**마케팅 포인트**")
+        for m in data.get("marketing", []):
+            st.write(f"- {m}")
+
+    with right:
+        st.subheader("AI 배합비")
+        f = data.get("formula", {})
+        table = []
+        for i, ing in enumerate(f.get("ingredients", [])):
+            table.append({
+                "원재료": ing,
+                "기존": f.get("기존", [])[i],
+                "A": f.get("A", [])[i],
+                "B": f.get("B", [])[i],
+            })
+        st.dataframe(table, use_container_width=True)
