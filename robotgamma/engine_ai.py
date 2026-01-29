@@ -4,24 +4,14 @@ import json
 from openai import OpenAI
 
 def propose_formula(flavor: str, selected_sweeteners: list):
-    """
-    AI 시니어 연구원이 문헌 근거로 배합비 및 전략 생성
-    - selected_sweeteners: 사용자가 선택한 당류 리스트 반영
-    """
+    """AI 시니어 연구원이 문헌 근거로 배합비 및 전략 생성"""
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-    
-    # 당류 선택에 따른 프롬프트 동적 구성
     sweetener_context = ", ".join(selected_sweeteners)
     
     prompt = f"""
-    너는 20년 경력의 'AI 시니어 식품연구원'이다. '{flavor}' 음료의 표준 배합비를 작성하라.
-    특히 당류는 사용자가 선택한 [{sweetener_context}]를 중심으로 설계하라.
-    
-    [지시사항]
-    1. 배합 근거: 식품공전 및 학술 논문 근거를 '📚 배합 설계 근거' 섹션에 3가지 이상 포함할 것.
-    2. 원료 구성: 정제수(용매), {flavor}농축액, 선택된 당류({sweetener_context}), 산미료, 향료, 안정제 등 10개 내외.
-    3. 정제수는 합계 100% 조절용(Water-Balance)으로 설정하고 min 함량을 반드시 명시할 것.
-    4. 각 원료별로 AI 추천값(AI), min(하한), max(상한), 사용목적, 사용주의사항을 포함할 것.
+    너는 20년 경력의 시니어 식품연구원이다. '{flavor}' 음료의 표준 배합비를 작성하라.
+    당류는 [{sweetener_context}]를 중심으로 설계하고, 반드시 합계 100%가 되도록 하라.
+    원료에는 '정제수'를 반드시 포함하고 사용목적을 '용매'로 설정하라.
     
     반드시 아래 JSON 형식으로만 응답:
     {{
@@ -42,12 +32,7 @@ def propose_formula(flavor: str, selected_sweeteners: list):
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"}
         )
-        data = json.loads(response.choices[0].message.content)
-        return data["report"], data["formula"]
+        return json.loads(response.choices[0].message.content)
     except Exception as e:
-        st.error(f"AI 시뮬레이션 오류: {e}")
-        return None, None
-
-def analyze_trends(top5):
-    # 트렌드 분석 로직 (캐싱 적용)
-    return {"summary": "건강 지향적 저당 음료 트렌드 지속 중"}
+        st.error(f"AI 분석 오류: {e}")
+        return None
