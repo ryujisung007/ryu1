@@ -1,75 +1,36 @@
+from __future__ import annotations
 import streamlit as st
-import pandas as pd
-import engine_ai as ai
-import ui_layout as ui
-import time
+import json
+from openai import OpenAI
 
-st.set_page_config(page_title="ABC 제품개발 로봇 Gamma", layout="wide")
-
-# 1. 사이드바: 전문가용 DB 업로드 및 컨트롤 센터
-st.sidebar.header("📂 R&D 전용 데이터베이스")
-uploaded_db = st.sidebar.file_uploader("원료 DB(CSV)를 업로드하세요", type="csv")
-
-if uploaded_db:
-    db_df = pd.read_csv(uploaded_db)
-    st.sidebar.success("✅ 원료 DB 로드 완료")
+def propose_formula(flavor: str, selected_category: str, selected_sweeteners: list, base_type: str):
+    """
+    AI 시니어 연구원: 당감미 특성 카테고리와 선택된 당류를 기반으로 정밀 배합
+    """
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    sweetener_ctx = ", ".join(selected_sweeteners)
     
-    # [지시사항] 자료가 가진 컬럼조건으로 검색 다각화
-    with st.sidebar.expander("🔍 DB 상세 검색"):
-        search_cat = st.multiselect("원료 카테고리 필터", options=db_df["카테고리"].unique())
-        if search_cat:
-            st.dataframe(db_df[db_df["카테고리"].isin(search_cat)])
+    prompt = f"""
+    너는 20년 경력의 'AI 시니어 식품연구원'이다. '{flavor}' 테마의 '{base_type}' 음료를 설계하라.
+    
+    [당류 설계 조건]
+    - 당감미 특성: {selected_category}
+    - 선택된 당류: {sweetener_ctx}
 
-    # 메인 시뮬레이터 시작
-    if st.session_state.get("selected_flavor"):
-        st.subheader(f"🧪 {st.session_state.selected_flavor} DB 연동형 시뮬레이터")
-        
-        # 2단계 당류 선택 UI
-        c1, c2, c3 = st.columns([1, 1.5, 1.5])
-        with c1: b_type = st.selectbox("가공 방식", ["농축액", "NFC", "퓨레"])
-        sweet_lib = {"천연 감미": ["정백당"], "저칼로리": ["알룰로스"], "제로": ["스테비아"]} # 예시
-        with c2: s_cat = st.selectbox("🍬 당감미 특성", list(sweet_lib.keys()))
-        with c3: s_choice = st.multiselect("📋 주요 사용당", sweet_lib[s_cat], default=[sweet_lib[s_cat][0]])
-
-        # AI DB 분석 호출
-        ckey = f"db_v1_{st.session_state.selected_flavor}_{b_type}_{hash(tuple(s_choice))}"
-        if ckey not in st.session_state:
-            with st.status("AI 시니어 연구원이 CSV DB 정밀 분석 중...") as s:
-                res = ai.propose_formula_from_db(st.session_state.selected_flavor, s_choice, b_type, db_df)
-                st.session_state[ckey] = res
-                s.update(label="✅ DB 기반 설계 완료", state="complete")
-
-        res = st.session_state[ckey]
-        if res:
-            # [무결성 보장] 상단 배합표 - 하단 물리 고정 슬라이더 레이아웃
-            table_spot = st.empty()
-            formula = res["formula"]
-            
-            others = [i for i in formula if "정제수" not in i['원료명']]
-            adj, sum_others = {}, 0.0
-            cols = st.columns(2)
-            
-            for i, item in enumerate(others):
-                with cols[i % 2]:
-                    # [지시사항] 물리적 상하한선 강제 고정
-                    v = st.slider(f"**{item['원료명']}** ({item['min']}%~{item['max']}%)", 
-                                  float(item['min']), float(item['max']), float(item['AI']), 0.01)
-                    adj[item['원료명']] = v
-                    sum_others += v
-            
-            # 정제수 오토 밸런스 및 합계 100% 검증
-            cur_w = max(0.0, 100.0 - sum_others)
-            adj["정제수"] = cur_w
-            
-            # 3단 대조 데이터 구성
-            d_list = [{"원료명": k, "개선(%)": f"{v:.2f}"} for k, v in adj.items()]
-            table_spot.table(pd.DataFrame(d_list)) # 상단 고정 출력
-            
-            # [지시사항] 하단 국내외 학술 근거 및 DBpia 링크
-            st.divider()
-            st.subheader("📚 학술 근거 및 국내외 논문 DB")
-            for ev in res["report"].get("📚 배합 설계 근거 및 문헌", []):
-                st.info(f"**{ev['title']}**\n{ev['desc']}")
-                st.markdown(f"[🔍 DBpia 검색](https://www.dbpia.co.kr/search/topSearch?query={ev['title']})")
-else:
-    st.info("💡 사이드바에서 원료 데이터베이스(CSV)를 먼저 업로드해 주세요.")
+    [R&D 설계 핵심 로직]
+    1. 정제수 제외 원료 비중 총합을 100%(=1,000포인트)로 설정하라.
+    2. 각 원료의 비중(%)에 10을 곱한 값이 해당 원료군의 '라이브러리 검토 뎁스'가 되도록 종류를 결정하라.
+    3. 원료 구성: 10~15종. (원료명, AI 추천%, min%, max%, 사용목적, 주의사항)
+    4. 근거 섹션: 국내 DBpia, RISS 논문 검색 링크 및 과학적 타당성을 포함하라.
+    5. 출력: 반드시 JSON 형식을 엄격히 준수할 것.
+    """
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}
+        )
+        return json.loads(response.choices[0].message.content)
+    except Exception as e:
+        st.error(f"AI 분석 엔진 에러: {e}")
+        return None
