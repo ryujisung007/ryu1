@@ -3,38 +3,31 @@ import streamlit as st
 import json
 from openai import OpenAI
 
-# [개선] 1,000개 이상의 원료 라이브러리를 코드 내 딕셔너리로 관리 (예시 구조)
-INGREDIENT_LIBRARY = {
-    "Base": ["NFC 사과즙 Type 1~100", "사과농축액(72Brix) Type 101~300", "사과퓨레 Type 301~400"],
-    "Sweetener": {
-        "천연 감미 (Natural)": ["정백당 A~Z", "결정과당 G1~G50", "꿀/시럽류 50종"],
-        "저칼로리/기능성 (Functional)": ["액상알룰로스 L1~L100", "에리스리톨", "자일리톨"],
-        "고감미/제로 (Zero-Sugar)": ["효소처리스테비아 S1~S100", "수크랄로스", "나한과추출물"]
-    },
-    "Additive": ["구연산", "DL-사과산", "비타민C", "펙틴", "천연향료", "잔탄검", "나한과추출분말"]
-}
-
-def propose_formula(flavor: str, selected_category: str, selected_sweeteners: list, base_type: str):
+def propose_formula_with_db(flavor: str, s_choice: list, b_type: str, db_df):
     """
-    AI 시니어 연구원: 내재화된 1,000포인트 라이브러리를 참조하여 초고속 배합 설계
+    업로드된 과일원료 DB에서 플레이버와 가공방법에 맞는 원료를 AI가 선별하여 설계
     """
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-    sweetener_ctx = ", ".join(selected_sweeteners)
     
-    # AI에게 라이브러리 구조를 인지시키고 비중 할당 지시
+    # [개선] 플레이버 키워드로 DB 필터링 (속도 및 정확도 향상)
+    relevant_items = db_df[db_df['원료명'].str.contains(flavor, na=False)].head(15)
+    db_sample = relevant_items.to_dict(orient='records')
+    
     prompt = f"""
-    너는 20년 경력의 'AI 시니어 식품연구원'이다. '{flavor}' 테마의 '{base_type}' 음료를 설계하라.
+    너는 20년 경력의 'AI 시니어 식품연구원'이다. 제공된 DB 원료 정보를 참고하여 '{flavor}' 음료를 설계하라.
     
-    [R&D 라이브러리 로직]
-    1. 정제수 제외 원료 총합을 1,000포인트로 설정하라.
-    2. {base_type}와 {sweetener_ctx}의 비중(%)에 따라 코드 내 정의된 라이브러리 뎁스에서 원료를 선별하라.
-    3. 원료 구성: 10~15종. (원료명, AI 추천%, min%, max%, 사용목적, 주의사항)
-    4. 학술 근거: DBpia, RISS 등 국내 DB 검색이 가능한 실제 논문 제목을 포함하라.
-    5. 출력: 반드시 JSON 형식 엄격 준수.
+    [참고 DB 원료 풀]
+    {db_sample}
+
+    [R&D 설계 로직]
+    1. 정제수 제외 원료 총합 = 1,000포인트. 
+    2. 당류는 {s_choice}를 사용하고 가공방식은 {b_type}를 우선 고려하라.
+    3. 배합표 항목: 원료명, AI(추천%), min(하한%), max(상한%), 사용목적, 주의사항.
+    4. 출력 형식: 반드시 JSON (출력 구조 내 'json' 단어 포함 필수).
     """
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini", # 로드 부담이 적은 모델 사용
+            model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"}
         )
