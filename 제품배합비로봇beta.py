@@ -348,7 +348,7 @@ def analyze_top5_with_openai(top5: List[Dict[str, Any]]) -> Dict[str, Any]:
 
         flavor_stats = [{"flavor": t["flavor"], "share": t["share"]} for t in top5]
         prompt = "\n".join([
-            "너는 20년 경력의 식품음료 트렌드 분석 전문가다.",
+            "너는 20년 경력의 식품음료 트렌드 분석 및 연구개발자이며 식품공학전공자이다.",
             "아래 플레이버 점유율 데이터를 해석해 JSON만 출력하라(추가 텍스트 금지).",
             f"입력 데이터: {json.dumps(flavor_stats, ensure_ascii=False)}",
             "출력 스키마:",
@@ -563,9 +563,9 @@ if records is None or top5 is None:
     st.stop()
 
 # -------------------------
-# (4) 가상 품목제조보고 테이블 (최상단)
+# 음료류 품목제조보고 통계
 # -------------------------
-st.subheader("📋 (4) 가상 품목제조보고 (Raw Data)")
+st.subheader("📋 음료류 품목제조보고 통계")
 st.dataframe(records, use_container_width=True, height=380)
 
 # 제조사별 Top 플레이버(요청 2번 이행)
@@ -576,7 +576,7 @@ with st.expander("🏭 제조사별 Top 플레이버 랭킹(상위 10개 제조�
 st.divider()
 
 # -------------------------
-# (1) Top5 플레이버 카드
+# Top5 플레이버 카드
 # -------------------------
 st.subheader("🔥 (1) Top5 플레이버 카드")
 if ai_top5 and isinstance(ai_top5, dict):
@@ -636,9 +636,9 @@ else:
 st.divider()
 
 # -------------------------
-# (3) 신입사원 미션 (제조공정 포함)
+# 리스크분석 미션
 # -------------------------
-st.subheader("🎯 (3) 신입사원 미션 (기획·배합 + 제조공정 포함)")
+st.subheader("🎯 리스크분석 미션")
 
 tab_a, tab_b = st.tabs(["미션 A: 기획·배합 판단", "미션 B: 음료 제조공정 이해"])
 
