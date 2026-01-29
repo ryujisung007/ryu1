@@ -2,127 +2,100 @@ import streamlit as st
 import pandas as pd
 import engine_ai as ai
 import ui_layout as ui
-import engine_data as data
+import engine_data as data # 가상데이터 모듈 유지
 import time
 
 st.set_page_config(page_title="ABC 제품개발 로봇 Gamma", layout="wide")
 
+# 세션 초기화
 if "selected_flavor" not in st.session_state: st.session_state.selected_flavor = None
-if "records" not in st.session_state: st.session_state.records = None
 
+# 사이드바 컨트롤
 st.sidebar.header("🚀 R&D 컨트롤 센터")
-months = st.sidebar.slider("분석 기간(개월)", 1, 6, 1)
-
-if st.sidebar.button("▶ 시뮬레이션 가동", use_container_width=True):
-    st.session_state.records = data.generate_fake_products(months, seed=int(time.time()))
+if st.sidebar.button("▶ 데이터 분석 및 동기화", use_container_width=True):
+    st.session_state.records = data.generate_fake_products(3, seed=42)
     st.session_state.top5 = data.calculate_top5(st.session_state.records)
-    st.session_state.selected_flavor = None
 
-if st.session_state.records:
-    st.subheader("📋 실시간 음료류 품목제조보고 현황")
-    st.dataframe(st.session_state.records, use_container_width=True, height=200)
+if st.session_state.get("records"):
     ui.render_top5_cards(st.session_state.top5)
     
     if st.session_state.selected_flavor:
         st.divider()
-        st.subheader(f"🧪 {st.session_state.selected_flavor} R&D 정밀 시뮬레이터")
+        st.subheader(f"🧪 {st.session_state.selected_flavor} 전문가용 정밀 R&D 시뮬레이터")
 
-        st.markdown("#### 🍯 주사용 당류(Sweetener) 선택")
-        sweetener_choice = st.multiselect(
-            "배합에 포함할 당류를 선택하세요",
-            ["액상알룰로스", "정백당", "결정과당", "에리스리톨", "효소처리스테비아", "나한과추출물"],
-            default=["액상알룰로스"]
-        )
+        # 1. 원료 라이브러리 선택권 부여 [지시사항 반영]
+        col_lib1, col_lib2 = st.columns(2)
+        with col_lib1:
+            base_type = st.selectbox("원료 가공 방식 선택", ["농축액(Concentrate)", "NFC 과즙", "퓨레(Puree)", "분말추출물"])
+        with col_lib2:
+            sweetener_choice = st.multiselect("활용 당류 선택", ["액상알룰로스", "정백당", "결정과당", "스테비아", "에리스리톨"], default=["액상알룰로스"])
 
-        # --- [수정] AI 작동 중 예상 시간 및 프로그레스 바 표시 ---
-        cache_key = f"res_{st.session_state.selected_flavor}_{hash(tuple(sweetener_choice))}"
-        
+        # AI 호출 및 예상 시간 표시 [지시사항 반영]
+        cache_key = f"res_{st.session_state.selected_flavor}_{base_type}_{hash(tuple(sweetener_choice))}"
         if cache_key not in st.session_state:
-            progress_bar = st.progress(0)
-            status_text = st.empty()
-            
-            # gpt-4o-mini 평균 응답 속도 기준 약 3~5초 시뮬레이션
-            for percent_complete in range(100):
-                time.sleep(0.03) # 예상 대기 시간 3초
-                progress_bar.progress(percent_complete + 1)
-                remaining = (100 - percent_complete) * 0.03
-                status_text.markdown(f"⏳ **AI 시니어 연구원이 분석 중... (예상 완료까지 약 {remaining:.1f}초)**")
-            
-            res = ai.propose_formula(st.session_state.selected_flavor, sweetener_choice)
-            if res:
+            with st.status("AI 시니어 연구원이 1,000개 라이브러리를 분석 중입니다...") as status:
+                st.write("⏳ 예상 완료 시간: 약 3.8초")
+                res = ai.propose_formula(st.session_state.selected_flavor, sweetener_choice, base_type)
                 st.session_state[cache_key] = res
-            progress_bar.empty()
-            status_text.empty()
+                status.update(label="✅ 배합 설계 완료", state="complete")
 
-        if cache_key in st.session_state:
-            res_data = st.session_state[cache_key]
-            report = res_data["report"]
-            formula = res_data["formula"]
+        res = st.session_state[cache_key]
+        formula = res["formula"]
 
-            col_report, col_sim = st.columns([1, 2.2])
+        col_report, col_sim = st.columns([1, 2.5])
+        
+        with col_report:
+            ui.render_marketing_report(res["report"])
             
-            with col_report:
-                ui.render_marketing_report(report)
-                
-            with col_sim:
-                # [중요] 추천배합표가 반드시 보이도록 레이아웃 고정
-                st.markdown("##### 📊 AI 시니어 연구원 추천 표준 배합표")
-                table_placeholder = st.empty()
-                
-                st.markdown("---")
-                st.markdown("#### 🛠️ 배합비 정밀 조절 (정제수 오토 밸런스)")
-                
-                # 원료 분류 및 슬라이더
-                water_item = next(item for item in formula if "정제수" in item['원료명'])
-                others = [item for item in formula if "정제수" not in item['원료명']]
-                
-                adjusted_values = {}
-                total_others = 0
-                s_cols = st.columns(2)
-                
-                for i, item in enumerate(others):
-                    with s_cols[i % 2]:
-                        val = st.slider(
-                            f"{item['원료명']} ({item['사용목적']})",
-                            min_value=float(item['min']),
-                            max_value=float(item['max']),
-                            value=float(item['AI']),
-                            step=0.01, key=f"s_{cache_key}_{item['원료명']}"
-                        )
-                        adjusted_values[item['원료명']] = val
-                        total_others += val
-                
-                auto_water = max(0.0, 100.0 - total_others)
-                adjusted_values["정제수"] = auto_water
-                
-                # 3단 표 생성 및 출력
-                display_list = []
-                for item in formula:
-                    name = item['원료명']
-                    recom = item['AI']
-                    curr = adjusted_values[name]
-                    display_list.append({
-                        "원료명": name,
-                        "추천 배합비(%)": f"{recom:.2f}",
-                        "개선 배합비(%)": f"{curr:.2f}",
-                        "차이(Delta)": f"{curr - recom:+.2f}",
-                        "사용목적": item['사용목적'],
-                        "주의사항": item['주의사항']
-                    })
-                
-                with table_placeholder:
-                    st.table(pd.DataFrame(display_list)) # table로 강제 출력
-                    if auto_water < water_item['min']:
-                        st.error(f"⚠️ 정제수 부족: {auto_water:.2f}% (최소 {water_item['min']}% 권장)")
-                    else:
-                        st.success(f"✅ 합계 100.00% 유지 (정제수: {auto_water:.2f}%)")
+        with col_sim:
+            # 상단: 3단 비교 배합표 (추천/개선/Delta)
+            table_placeholder = st.empty()
+            
+            st.markdown("---")
+            st.markdown("#### 🛠️ 원료별 정밀 조절 (물리적 상하한선 고정 모드)")
+            
+            # 오토 밸런스 로직
+            others = [item for item in formula if "정제수" not in item['원료명']]
+            water_cfg = next(item for item in formula if "정제수" in item['원료명'])
+            
+            adjusted = {}
+            sum_others = 0
+            
+            s_cols = st.columns(2)
+            for i, item in enumerate(others):
+                with s_cols[i % 2]:
+                    # [물리 고정] 사용자가 당겨도 min/max를 절대 못 벗어남
+                    val = st.slider(
+                        f"**{item['원료명']}** (범위: {item['min']}% ~ {item['max']}%)",
+                        min_value=float(item['min']), max_value=float(item['max']),
+                        value=float(item['AI']), step=0.01,
+                        key=f"slider_{cache_key}_{item['원료명']}"
+                    )
+                    adjusted[item['원료명']] = val
+                    sum_others += val
+            
+            # 정제수 자동 계산
+            cur_water = max(0.0, 100.0 - sum_others)
+            adjusted["정제수"] = cur_water
+            
+            # 결과 데이터프레임 구성
+            display_list = []
+            for item in formula:
+                name = item['원료명']
+                recom = item['AI']
+                curr = adjusted.get(name, cur_water)
+                display_list.append({
+                    "원료명": name, "추천 배합(%)": f"{recom:.2f}",
+                    "개선 배합(%)": f"{curr:.2f}", "차이(Delta)": f"{curr - recom:+.2f}",
+                    "사용 목적": item['사용목적'], "주의사항": item['주의사항']
+                })
+            
+            with table_placeholder:
+                st.table(pd.DataFrame(display_list))
+                st.success(f"✅ 합계 100.00% 유지 (정제수 자동 조절: {cur_water:.2f}%)")
 
-            # 하단 근거 섹션
-            st.divider()
-            st.subheader("📚 AI 시니어 연구원의 배합 설계 근거")
-            evidence = report.get("📚 배합 설계 근거(학술/문헌)", [])
-            if evidence:
-                ev_cols = st.columns(len(evidence))
-                for idx, text in enumerate(evidence):
-                    with ev_cols[idx]:
-                        st.info(text)
+        # 2. 최하단: AI 추천 근거 섹션
+        st.divider()
+        st.subheader("📚 AI 시니어 연구원의 배합 설계 근거 (학술/문헌)")
+        evidence = res["report"].get("📚 배합 설계 근거(학술/문헌)", [])
+        for text in evidence: st.info(text)
