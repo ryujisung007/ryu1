@@ -5,20 +5,21 @@ from openai import OpenAI
 
 def propose_formula(flavor: str, selected_sweeteners: list, base_type: str):
     """
-    AI 시니어 연구원이 1,000배수 식별 로직을 포함하여 배합 설계
+    AI 시니어 연구원: 정제수 제외 원료 총합 1,000 포인트를 기준으로 라이브러리 뎁스 할당
     """
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
     sweetener_ctx = ", ".join(selected_sweeteners)
     
     prompt = f"""
-    너는 20년 경력의 'AI 시니어 식품연구원'이다. '{flavor}'를 테마로 한 '{base_type}' 기반 음료를 설계하라.
-    당류는 [{sweetener_ctx}]를 사용하라. 
-
-    [지시사항]
-    1. 원료 10~15종 구성. 각 원료의 AI 추천값(AI)은 % 단위(예: 0.15)로 작성하라.
-    2. 내부 식별을 위해 (AI * 1000) 값이 원료의 고유 특성과 매칭되도록 설계하라.
-    3. 배합표 항목: 원료명, AI(추천%), min(하한%), max(상한%), 사용목적, 주의사항.
-    4. 출력 형식은 반드시 JSON이어야 한다.
+    너는 20년 경력의 'AI 시니어 식품연구원'이다. '{flavor}' 테마의 '{base_type}' 음료를 설계하라.
+    
+    [R&D 설계 핵심 로직]
+    1. 정제수를 제외한 나머지 원료의 비중 총합을 100%(=1,000포인트)로 본다.
+    2. 각 원료가 차지하는 비중(%)에 10을 곱하여 해당 원료의 '라이브러리 검토 뎁스'를 결정하라.
+       예: 농축액이 비중의 60%라면 600개의 라이브러리 종류 중 최적을 선택.
+    3. 원료 구성: 10~15종 구성. (원료명, AI 추천%, min%, max%, 사용목적, 주의사항)
+    4. 근거 섹션: 국내 DBpia, RISS 및 국외 PubMed 논문 링크를 포함하라.
+    5. 출력 형식: 반드시 JSON 형식을 엄격히 준수하라 (JSON 단어 포함).
     """
     try:
         response = client.chat.completions.create(
