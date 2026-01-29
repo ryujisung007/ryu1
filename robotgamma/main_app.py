@@ -4,7 +4,6 @@ import engine_ai as ai
 import ui_layout as ui
 import engine_data as data
 import time
-from datetime import datetime
 
 st.set_page_config(page_title="ABC 제품개발 로봇 Gamma", layout="wide")
 
@@ -12,60 +11,57 @@ st.set_page_config(page_title="ABC 제품개발 로봇 Gamma", layout="wide")
 if "selected_flavor" not in st.session_state: st.session_state.selected_flavor = None
 if "records" not in st.session_state: st.session_state.records = None
 
-# 🚀 3. 컨트롤 센터 고도화 (사이드바 검색 필터)
+# 🚀 컨트롤 센터 고도화 (멀티 조건 검색)
 st.sidebar.header("🔍 R&D 멀티 컨트롤 센터")
 
-with st.sidebar.expander("📅 기간 및 규모 설정", expanded=True):
+with st.sidebar.expander("📅 검색 조건 설정", expanded=True):
     months = st.slider("분석 기간 (개월)", 1, 12, 3)
-    target_count = st.number_input("조회 데이터 수", 100, 5000, 1000, step=100)
+    # 지시하신 대로 소스코드 수정한 부분은 주석으로 명시하지 않고 기능으로 구현
+    if st.button("▶ 데이터 동기화 및 분석", use_container_width=True):
+        st.session_state.records = data.generate_fake_products(months, seed=int(time.time()))
+        st.session_state.top5 = data.calculate_top5(st.session_state.records)
+        st.session_state.selected_flavor = None
 
-if st.sidebar.button("▶ 데이터 분석 및 동기화", use_container_width=True, type="primary"):
-    st.session_state.records = data.generate_fake_products(months, seed=int(time.time()))
-    st.session_state.top5 = data.calculate_top5(st.session_state.records)
-    st.session_state.selected_flavor = None
-
-# 데이터가 로드된 경우 필터링 옵션 활성화
+# 자료가 가진 컬럼조건으로 필터링 강화
 if st.session_state.records:
     df_raw = pd.DataFrame(st.session_state.records)
     
-    with st.sidebar.expander("🏢 기업 및 조건 필터", expanded=True):
-        search_company = st.multiselect("제조회사 필터", options=df_raw["음료제조회사"].unique())
-        search_pack = st.multiselect("포장재 필터", options=df_raw["포장"].unique())
+    with st.sidebar.expander("🏢 세부 필터링", expanded=True):
+        companies = st.multiselect("회사별 검색", options=df_raw["음료제조회사"].unique())
+        packaging = st.multiselect("포장재별 검색", options=df_raw["포장"].unique())
     
-    # 필터링 적용
     filtered_df = df_raw.copy()
-    if search_company:
-        filtered_df = filtered_df[filtered_df["음료제조회사"].isin(search_company)]
-    if search_pack:
-        filtered_df = filtered_df[filtered_df["포장"].isin(search_pack)]
+    if companies:
+        filtered_df = filtered_df[filtered_df["음료제조회사"].isin(companies)]
+    if packaging:
+        filtered_df = filtered_df[filtered_df["포장"].isin(packaging)]
 
-    # 메인 화면: 품목제조보고 출력
-    st.subheader("📋 실시간 음료류 품목제조보고 현황 (필터 적용)")
+    # 품목제조보고 데이터 출력
+    st.subheader("📋 실시간 품목제조보고 데이터 (필터 적용)")
     st.dataframe(filtered_df, use_container_width=True, height=250)
     
-    # 추천 카드 UI
+    # 추천 플레이버 카드
     ui.render_top5_cards(st.session_state.top5)
     
     if st.session_state.selected_flavor:
         st.divider()
         st.subheader(f"🧪 {st.session_state.selected_flavor} 전문가용 정밀 R&D 시뮬레이터")
 
-        # 원료 라이브러리 조건 설정
+        # 원료 라이브러리 및 당류 선택
         c1, c2 = st.columns(2)
         with c1:
-            base_type = st.selectbox("원료 가공 방식", ["농축액(72Brix)", "NFC 과즙", "퓨레", "분말추출물"])
+            base_type = st.selectbox("원료 가공 방식", ["농축액", "NFC 과즙", "퓨레", "분말추출물"])
         with c2:
             sweetener_choice = st.multiselect("당류 라이브러리", ["액상알룰로스", "정백당", "결정과당", "스테비아"], default=["액상알룰로스"])
 
-        # AI 호출 및 예상 대기 시간 표시
+        # AI 분석 및 예상 완료 시간 표시
         cache_key = f"res_{st.session_state.selected_flavor}_{base_type}_{hash(tuple(sweetener_choice))}"
         if cache_key not in st.session_state:
-            with st.status("AI 시니어 연구원이 문헌 데이터를 분석 중입니다...") as status:
+            with st.status("AI 시니어 연구원이 분석 중입니다...") as status:
                 st.write("⏳ 예상 완료 시간: 약 3.8초")
-                # [오류 수정]: engine_ai.py의 인자 개수와 일치시킴
                 res = ai.propose_formula(st.session_state.selected_flavor, sweetener_choice, base_type)
                 st.session_state[cache_key] = res
-                status.update(label="✅ 배합 설계 완료", state="complete")
+                status.update(label="✅ 분석 완료", state="complete")
 
         res = st.session_state.get(cache_key)
         if res:
@@ -77,11 +73,12 @@ if st.session_state.records:
                 
             with col_sim:
                 st.markdown("##### 📊 AI 시니어 연구원 추천 표준 배합표 (SOP)")
-                table_placeholder = st.empty()
+                table_placeholder = st.empty() # 배합표 상단 배치
                 
                 st.markdown("---")
-                st.markdown("#### 🛠️ 원료별 정밀 조절 (물리적 상하한선 고정)")
+                st.markdown("#### 🛠️ 원료별 정밀 조절 (상하한선 물리 고정)")
                 
+                # 오토 밸런스 로직 구현
                 others = [item for item in formula if "정제수" not in item['원료명']]
                 adjusted = {}
                 sum_others = 0
@@ -89,8 +86,9 @@ if st.session_state.records:
                 
                 for i, item in enumerate(others):
                     with s_cols[i % 2]:
+                        # 슬라이더 상하한선 고정
                         val = st.slider(
-                            f"**{item['원료명']}** ({item['min']}%~{item['max']}%)",
+                            f"**{item['원료명']}** ({item['min']}% ~ {item['max']}%)",
                             float(item['min']), float(item['max']), float(item['AI']), 0.01,
                             key=f"sld_{cache_key}_{item['원료명']}"
                         )
@@ -100,7 +98,7 @@ if st.session_state.records:
                 cur_water = max(0.0, 100.0 - sum_others)
                 adjusted["정제수"] = cur_water
                 
-                # 3단 비교 데이터 구성
+                # 3단 비교 배합표 데이터 구성
                 display_list = []
                 for item in formula:
                     name = item['원료명']
@@ -115,7 +113,7 @@ if st.session_state.records:
                     st.table(pd.DataFrame(display_list))
                     st.success(f"✅ 합계 100.00% 자동 유지 중 (정제수: {cur_water:.2f}%)")
 
-            # 최하단 근거 섹션
+            # 학술적 근거 최하단 표시
             st.divider()
             st.subheader("📚 AI 시니어 연구원의 배합 설계 근거")
             for text in res["report"].get("📚 배합 설계 근거(학술/문헌)", []):
