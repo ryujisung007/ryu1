@@ -4,3 +4,5 @@ pandas
 plotly
 altair
 matplotlib
+streamlit
+openai
