@@ -1,69 +1,60 @@
 from __future__ import annotations
 import streamlit as st
 import json
-import hashlib
-from typing import Any, Dict, List, Optional
-
-try:
-    from openai import OpenAI
-except ImportError:
-    OpenAI = None
-
-def get_hash(data: Any) -> str:
-    return hashlib.sha256(json.dumps(data, ensure_ascii=False, sort_keys=True).encode("utf-8")).hexdigest()[:16]
+from openai import OpenAI
 
 def propose_formula(flavor: str):
     """
-    [AI 연구원 모드] 20년 경력의 노하우와 문헌 근거를 바탕으로 
-    마케팅 전략 및 정밀 배합비(상하한치 포함)를 실시간 생성합니다.
+    [AI 시니어 연구원 + 관능 전문가 협의 로직]
+    1. 플레이버 선택 -> 2. 학습 데이터/트렌드 분석 -> 3. 표준 배합표(JSON) 생성
     """
-    if "OPENAI_API_KEY" in st.secrets:
-        client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
-    else:
-        client = None
+    # 빠른 반응과 로드 부담이 적은 모델 설정
+    client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    
+    prompt = f"""
+    너는 20년 경력의 'AI 시니어 식품연구원'이자 '식품 관능조사 전문가'이다.
+    사용자가 선택한 플레이버 '{flavor}'를 바탕으로 다음 단계에 따라 표준 배합표를 작성하라.
 
-    if client:
-        try:
-            # AI 연구원에게 마케팅 전략과 배합비 설계를 동시에 명령
-            prompt = f"""
-            너는 20년 경력의 시니어 식품연구원이자 마케팅 전략가다. 
-            '{flavor}' 음료 신제품 개발을 위해 다음을 수행하라.
+    [단계 1] 시니어 연구원의 학습 데이터 기반 표준 배합 설계 (문헌/논문 근거)
+    [단계 2] 최신 트렌드와 관능 요소(맛의 강도, 후미, 바디감) 접목
+    [단계 3] 관능 전문가 협의를 통한 소비자 수용도 최적화
 
-            1. 마케팅 전략: 제품 컨셉, 핵심 USP, 타겟 전략, 제조 리스크를 개조식으로 작성.
-            2. 식품 배합비 작성: 
-               - 문헌, 논문, 인터넷 등 근거가 있는 표준 배합비를 기준으로 작성할 것.
-               - 원료는 '정제수, NFC {flavor} 과즙, 액상알룰로스, 구연산, 천연향료, 비타민C, 펙틴, 정제소금, 천연클라우드, 천연색소'를 기본으로 사용하고 필요시 추가.
-               - 각 원료별로 AI 추천값(AI), 사용 상한선(max), 하한선(min), 사용 목적(role)을 정할 것.
-               - 배합비 합계는 반드시 100.00이 되어야 함.
-
-            반드시 아래 JSON 구조로만 출력하라:
+    [출력 요구사항]
+    1. 마케팅 전략: 개조식 보고서 형태
+    2. 식품 배합비 표: 
+       - 원료명, AI 추천값(AI), 하한선(min), 상한선(max), 사용 목적, 용도, 용법, 사용주의사항 포함.
+       - 배합비 합계는 반드시 100.00%가 되어야 함.
+    
+    반드시 아래 JSON 구조로만 응답하라:
+    {{
+        "marketing_report": {{
+            "🚀 제품 포지셔닝 및 개발 컨셉": ["..."],
+            "✨ 관능 전문가 협의 결과 (USP)": ["..."],
+            "⚠️ 제조 리스크 및 품질관리": ["..."]
+        }},
+        "standard_formula": [
             {{
-                "strategy": {{
-                    "🚀 제품 개발 컨셉": ["문구1", "문구2"],
-                    "✨ 핵심 USP 및 마케팅": ["문구1", "문구2"],
-                    "⚠️ 제조 리스크 및 품질관리(SOP)": ["문구1", "문구2"]
-                }},
-                "ingredients": [
-                    {{"원재료": "원료명", "AI": 70.0, "min": 50.0, "max": 90.0, "role": "사용목적(용도/용법)"}},
-                    ...
-                ]
+                "원료명": "...",
+                "AI": 70.0,
+                "min": 50.0,
+                "max": 90.0,
+                "사용목적": "...",
+                "용도": "...",
+                "용법": "...",
+                "사용주의사항": "..."
             }}
-            """
-            response = client.chat.completions.create(
-                model="gpt-4o-mini", # 반응 속도가 빠르고 로드 부담이 적은 모델 사용
-                messages=[{"role": "user", "content": prompt}],
-                response_format={"type": "json_object"}
-            )
-            ai_data = json.loads(response.choices[0].message.content)
-            return ai_data["strategy"], ai_data["ingredients"]
-            
-        except Exception as e:
-            st.error(f"AI 호출 오류: {e}")
-            return {}, []
-    else:
-        # Fallback: API 키가 없을 경우를 대비한 기본 데이터
-        return {"안내": ["API 키가 설정되지 않아 AI 분석이 불가능합니다."]}, []
-
-def analyze_trends(top5: List[Dict[str, Any]]) -> Dict[str, Any]:
-    # (기존 트렌드 분석 로직 유지)
-    return {"summary": "트렌드 분석 완료", "flavors": {}}
+        ]
+    }}
+    """
+    
+    try:
+        response = client.chat.completions.create(
+            model="gpt-4o-mini", # 반응이 빠르고 효율적인 모델 사용
+            messages=[{"role": "user", "content": prompt}],
+            response_format={"type": "json_object"}
+        )
+        data = json.loads(response.choices[0].message.content)
+        return data["marketing_report"], data["standard_formula"]
+    except Exception as e:
+        st.error(f"AI 엔진 호출 중 오류 발생: {e}")
+        return None, None
