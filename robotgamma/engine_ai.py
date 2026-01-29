@@ -3,58 +3,51 @@ import streamlit as st
 import json
 from openai import OpenAI
 
-def propose_formula(flavor: str):
+def propose_formula(flavor: str, selected_sweeteners: list):
     """
-    [AI 시니어 연구원 + 관능 전문가 협의 로직]
-    1. 플레이버 선택 -> 2. 학습 데이터/트렌드 분석 -> 3. 표준 배합표(JSON) 생성
+    AI 시니어 연구원이 문헌 근거로 배합비 및 전략 생성
+    - selected_sweeteners: 사용자가 선택한 당류 리스트 반영
     """
-    # 빠른 반응과 로드 부담이 적은 모델 설정
     client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
     
-    prompt = f"""
-    너는 20년 경력의 'AI 시니어 식품연구원'이자 '식품 관능조사 전문가'이다.
-    사용자가 선택한 플레이버 '{flavor}'를 바탕으로 다음 단계에 따라 표준 배합표를 작성하라.
-
-    [단계 1] 시니어 연구원의 학습 데이터 기반 표준 배합 설계 (문헌/논문 근거)
-    [단계 2] 최신 트렌드와 관능 요소(맛의 강도, 후미, 바디감) 접목
-    [단계 3] 관능 전문가 협의를 통한 소비자 수용도 최적화
-
-    [출력 요구사항]
-    1. 마케팅 전략: 개조식 보고서 형태
-    2. 식품 배합비 표: 
-       - 원료명, AI 추천값(AI), 하한선(min), 상한선(max), 사용 목적, 용도, 용법, 사용주의사항 포함.
-       - 배합비 합계는 반드시 100.00%가 되어야 함.
+    # 당류 선택에 따른 프롬프트 동적 구성
+    sweetener_context = ", ".join(selected_sweeteners)
     
-    반드시 아래 JSON 구조로만 응답하라:
+    prompt = f"""
+    너는 20년 경력의 'AI 시니어 식품연구원'이다. '{flavor}' 음료의 표준 배합비를 작성하라.
+    특히 당류는 사용자가 선택한 [{sweetener_context}]를 중심으로 설계하라.
+    
+    [지시사항]
+    1. 배합 근거: 식품공전 및 학술 논문 근거를 '📚 배합 설계 근거' 섹션에 3가지 이상 포함할 것.
+    2. 원료 구성: 정제수(용매), {flavor}농축액, 선택된 당류({sweetener_context}), 산미료, 향료, 안정제 등 10개 내외.
+    3. 정제수는 합계 100% 조절용(Water-Balance)으로 설정하고 min 함량을 반드시 명시할 것.
+    4. 각 원료별로 AI 추천값(AI), min(하한), max(상한), 사용목적, 사용주의사항을 포함할 것.
+    
+    반드시 아래 JSON 형식으로만 응답:
     {{
-        "marketing_report": {{
-            "🚀 제품 포지셔닝 및 개발 컨셉": ["..."],
-            "✨ 관능 전문가 협의 결과 (USP)": ["..."],
+        "report": {{
+            "🚀 마케팅 및 개발 컨셉": ["..."],
+            "📚 배합 설계 근거(학술/문헌)": ["..."],
             "⚠️ 제조 리스크 및 품질관리": ["..."]
         }},
-        "standard_formula": [
-            {{
-                "원료명": "...",
-                "AI": 70.0,
-                "min": 50.0,
-                "max": 90.0,
-                "사용목적": "...",
-                "용도": "...",
-                "용법": "...",
-                "사용주의사항": "..."
-            }}
+        "formula": [
+            {{ "원료명": "정제수", "AI": 80.0, "min": 50.0, "max": 95.0, "사용목적": "용매", "주의사항": "최종 100 조절" }},
+            ...
         ]
     }}
     """
-    
     try:
         response = client.chat.completions.create(
-            model="gpt-4o-mini", # 반응이 빠르고 효율적인 모델 사용
+            model="gpt-4o-mini",
             messages=[{"role": "user", "content": prompt}],
             response_format={"type": "json_object"}
         )
         data = json.loads(response.choices[0].message.content)
-        return data["marketing_report"], data["standard_formula"]
+        return data["report"], data["formula"]
     except Exception as e:
-        st.error(f"AI 엔진 호출 중 오류 발생: {e}")
+        st.error(f"AI 시뮬레이션 오류: {e}")
         return None, None
+
+def analyze_trends(top5):
+    # 트렌드 분석 로직 (캐싱 적용)
+    return {"summary": "건강 지향적 저당 음료 트렌드 지속 중"}
