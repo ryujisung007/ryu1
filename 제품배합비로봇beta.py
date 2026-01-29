@@ -578,7 +578,7 @@ st.divider()
 # -------------------------
 # Top5 플레이버 카드
 # -------------------------
-st.subheader("🔥 (1) Top5 플레이버 카드")
+st.subheader("🔥Top5 플레이버 카드")
 if ai_top5 and isinstance(ai_top5, dict):
     st.info(ai_top5.get("summary", ""))
 cols = st.columns(5)
@@ -599,7 +599,7 @@ st.divider()
 # -------------------------
 # (2) 좌/우 분할: 컨셉(좌) + 배합비(우)
 # -------------------------
-st.subheader("🧠🧪 (2) AI 신규 제품 제안 & 배합비 설계 (좌/우 분할)")
+st.subheader("🧠🧪AI 신규 제품 제안 & 배합비 설계 (좌/우 분할)")
 
 if not st.session_state.selected_flavor:
     st.info("위 Top5 카드에서 **이 맛으로 신제품 기획**을 눌러주세요.")
