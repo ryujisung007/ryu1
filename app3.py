@@ -272,4 +272,4 @@ for col, t in zip(cols, top5):
         if img_url:
             st.image(img_url, use_container_width=True)
         else:
-            st.markdown("<div style='height:200px;background:#eee;text-align:center;line-height:200px;'>이미지 없음</d
+            st.markdown("<div style='height:200px;background:#eee;text-align:center;line-height:200px;'>이미지 없음</d>
