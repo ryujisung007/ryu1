@@ -18,7 +18,7 @@ def render_top5_cards(top5, ai_result):
 
 def render_marketing_report(strategy_dict):
     """마케팅 전략 요소를 개조식(Bullet point)으로 정리하여 출력"""
-    st.markdown("#### 🧠 제품 개발 및 마케팅 세부 전략")
+    st.markdown("#### 🧠 제품 개발 및 마케팅 세부 전략 보고")
     if not strategy_dict:
         st.warning("전략 데이터를 불러올 수 없습니다.")
         return
