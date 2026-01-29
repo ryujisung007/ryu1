@@ -1,52 +1,111 @@
-# [긴급 수정] 물리 제약 및 실시간 렌더링 보강 로직
-with col_sim:
-    # 1. 최상단 배합표 강제 출력 공간
-    table_placeholder = st.empty() 
-    
-    st.markdown("---")
-    st.subheader("🛠️ 원료별 정밀 조절 (상하한선 물리적 고정)")
-    
-    # 데이터 무결성 검증을 위한 변수 초기화
-    adj_values = {}
-    sum_others = 0.0
-    
-    # 슬라이더 렌더링 (데이터 형변환 및 범위 강제)
-    scols = st.columns(2)
-    for i, item in enumerate(others):
-        with scols[i % 2]:
-            # [수정 포인트] min_value, max_value를 AI 설계값으로 엄격히 제한
-            # 슬라이더가 범위를 절대 벗어날 수 없도록 물리적 가드레일 설치
-            val = st.slider(
-                label=f"**{item['원료명']}** ({item['min']}% ~ {item['max']}%)",
-                min_value=float(item['min']), 
-                max_value=float(item['max']), 
-                value=float(item['AI']),
-                step=0.01,
-                key=f"strict_sld_{item['원료명']}"
-            )
-            adj_values[item['원료명']] = val
-            sum_others += val
+import streamlit as st
+import pandas as pd
+import engine_ai as ai
+import ui_layout as ui
+import engine_data as data
+import time
 
-    # 2. 정제수 오토 밸런싱 (100% 무결성 보장)
-    water_val = max(0.0, 100.0 - sum_others)
-    adj_values["정제수"] = water_val
+st.set_page_config(page_title="ABC 제품개발 로봇 Gamma", layout="wide")
 
-    # 3. 배합표 데이터 생성 및 즉시 렌더링
-    display_df = []
-    for item in formula:
-        nm = item['원료명']
-        re = item['AI']
-        cu = adj_values.get(nm, water_val)
-        display_df.append({
-            "원료명": nm, "추천(%)": f"{re:.2f}", "개선(%)": f"{cu:.2f}",
-            "Delta": f"{cu - re:+.2f}", "사용목적": item['사용목적'], "주의사항": item['주의사항']
-        })
+if "selected_flavor" not in st.session_state: st.session_state.selected_flavor = None
+
+# 사이드바 컨트롤 센터 (필터링 강화)
+st.sidebar.header("🔍 R&D 멀티 컨트롤 센터")
+with st.sidebar.expander("📅 검색 조건 설정", expanded=True):
+    months = st.slider("분석 기간", 1, 12, 3)
+    if st.sidebar.button("▶ 데이터 동기화 및 분석", use_container_width=True):
+        st.session_state.records = data.generate_fake_products(months, seed=int(time.time()))
+        st.session_state.top5 = data.calculate_top5(st.session_state.records)
+        st.session_state.selected_flavor = None
+
+if st.session_state.get("records"):
+    df_raw = pd.DataFrame(st.session_state.records)
+    # 회사별/포장재별 검색 기능
+    companies = st.sidebar.multiselect("회사별 검색", options=df_raw["음료제조회사"].unique())
+    f_df = df_raw[df_raw["음료제조회사"].isin(companies)] if companies else df_raw
     
-    # 빈 공간에 표를 강제로 밀어넣음
-    table_placeholder.table(pd.DataFrame(display_df))
+    st.subheader("📋 실시간 품목제조보고 데이터 현황")
+    st.dataframe(f_df, use_container_width=True, height=200)
+    ui.render_top5_cards(st.session_state.top5)
     
-    # 상단 상태바 업데이트
-    if water_val < water_cfg['min']:
-        st.error(f"⚠️ 합계 유지 중이나 정제수 부족: {water_val:.2f}% (최소 {water_cfg['min']}% 필요)")
-    else:
-        st.success(f"✅ 합계 100.00% 자동 유지 중 (정제수: {water_val:.2f}%)")
+    if st.session_state.selected_flavor:
+        st.divider()
+        st.subheader(f"🧪 {st.session_state.selected_flavor} 전문가용 정밀 시뮬레이터")
+
+        # 원료 라이브러리 및 당류 선택
+        c1, c2 = st.columns(2)
+        with c1: b_type = st.selectbox("가공 방식", ["농축액", "NFC 과즙", "퓨레", "분말추출물"])
+        with c2: s_choice = st.multiselect("당류 라이브러리", ["액상알룰로스", "정백당", "스테비아", "에리스리톨"], default=["액상알룰로스"])
+
+        # AI 호출 및 캐싱
+        ckey = f"v3_{st.session_state.selected_flavor}_{b_type}_{hash(tuple(s_choice))}"
+        if ckey not in st.session_state:
+            with st.status("AI 시니어 연구원이 정밀 배합 설계 중...") as s:
+                st.session_state[ckey] = ai.propose_formula(st.session_state.selected_flavor, s_choice, b_type)
+                s.update(label="✅ 배합 설계 완료", state="complete")
+
+        res = st.session_state[ckey]
+        if res:
+            col_rep, col_sim = st.columns([1, 2.5])
+            with col_rep: ui.render_marketing_report(res["report"])
+            
+            with col_sim:
+                # [무결성 1] 추천배합표 강제 출력 공간 (상단 고정)
+                table_placeholder = st.empty()
+                
+                st.markdown("---")
+                st.markdown("#### 🛠️ 원료별 정밀 조절 (상하한선 물리적 고정)")
+                
+                formula = res["formula"]
+                others = [i for i in formula if "정제수" not in i['원료명']]
+                water_cfg = next(i for i in formula if "정제수" in i['원료명'])
+                
+                adj = {}
+                sum_others = 0.0
+                scols = st.columns(2)
+                
+                for i, item in enumerate(others):
+                    with scols[i % 2]:
+                        # [무결성 2] 슬라이더 물리적 범위 강제 (min/max 이탈 불가)
+                        val = st.slider(
+                            f"**{item['원료명']}** ({item['min']}% ~ {item['max']}%)",
+                            min_value=float(item['min']), 
+                            max_value=float(item['max']), 
+                            value=float(item['AI']),
+                            step=0.01,
+                            key=f"sld_v3_{ckey}_{item['원료명']}"
+                        )
+                        adj[item['원료명']] = val
+                        sum_others += val
+                
+                # [무결성 3] 정제수 오토 밸런스 (합계 100.00% 유지)
+                cur_w = max(0.0, 100.0 - sum_others)
+                adj["정제수"] = cur_w
+                
+                # 3단 데이터 구성
+                d_list = []
+                for item in formula:
+                    name = item['원료명']
+                    re_val = item['AI']
+                    cu_val = adj.get(name, cur_w)
+                    d_list.append({
+                        "원료명": name, "추천(%)": f"{re_val:.2f}", "개선(%)": f"{cu_val:.2f}",
+                        "Delta": f"{cu_val - re_val:+.2f}", "사용목적": item['사용목적'], "주의사항": item['주의사항']
+                    })
+                
+                # 상단 배합표에 데이터 주입
+                with table_placeholder:
+                    st.table(pd.DataFrame(d_list))
+                    if cur_w < water_cfg['min']:
+                        st.error(f"⚠️ 정제수 한계 미달: {cur_w:.2f}% (최소 {water_cfg['min']}% 필요)")
+                    else:
+                        st.success(f"✅ 합계 100.00% 자동 유지 중 (정제수: {cur_w:.2f}%)")
+
+            # [무결성 4] 하단 학술 근거 및 링크 출력
+            st.divider()
+            st.subheader("📚 AI 시니어 연구원의 배합 설계 근거 및 문헌")
+            ev_cols = st.columns(len(res["report"]["📚 배합 설계 근거 및 문헌"]))
+            for idx, ev in enumerate(res["report"]["📚 배합 설계 근거 및 문헌"]):
+                with ev_cols[idx]:
+                    st.info(f"**{ev['title']}**\n\n{ev['desc']}")
+                    st.markdown(f"[🔗 관련 문헌/사이트 검색]({ev['url']})")
