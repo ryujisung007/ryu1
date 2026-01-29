@@ -65,6 +65,11 @@ def render_sensory_radar():
 # =========================
 # AI 미션 생성 (문제만 생성)
 # =========================
+import streamlit as st
+
+if "mission" not in st.session_state:
+    st.session_state["mission"] = None
+
 def generate_ai_mission(role, flavor):
     try:
         from openai import OpenAI
